@@ -11,10 +11,18 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(16, 'JWT_REFRESH_SECRET deve ter no mínimo 16 caracteres.'),
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
 
-  // Configurações do Cloudinary (Opcionais em ambiente de teste)
+  // Cloudinary
   CLOUDINARY_CLOUD_NAME: z.string().optional().default('demo'),
   CLOUDINARY_API_KEY: z.string().optional().default('123456789'),
   CLOUDINARY_API_SECRET: z.string().optional().default('secret'),
+
+  // Stripe (USD)
+  STRIPE_SECRET_KEY: z.string().optional().default('sk_test_mock'),
+  STRIPE_WEBHOOK_SECRET: z.string().optional().default('whsec_mock'),
+
+  // Dados Bancários Nacionais para Pagamento em Kwanza (AOA)
+  BANK_IBAN_AOA: z.string().default('AO06.0040.0000.1234.5678.1014.3'),
+  BANK_ACCOUNT_NAME: z.string().default('Media Kit SaaS Lda'),
 });
 
 const _env = envSchema.safeParse(process.env);
