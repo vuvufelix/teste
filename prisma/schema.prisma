@@ -21,20 +21,168 @@ enum SubscriptionStatus {
   EXPIRED
 }
 
-model User {
-  id               String             @id @default(uuid())
-  name             String
-  email            String             @unique
-  passwordHash     String
-  role             Role               @default(INFLUENCER)
-  subscriptionStatus SubscriptionStatus @default(TRIALING)
-  trialEndsAt      DateTime
-  
-  // Tokens para revogação/refresh token seguro
-  refreshTokenHash String?
+enum PaymentMethod {
+  STRIPE_CARD
+  BANK_TRANSFER_AOA
+}
 
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ProposalStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+}
+
+model User {
+  id                 String             @id @default(uuid())
+  name               String
+  email              String             @unique
+  passwordHash       String
+  role               Role               @default(INFLUENCER)
+  subscriptionStatus SubscriptionStatus @default(TRIALING)
+  trialEndsAt        DateTime
+  refreshTokenHash   String?
+
+  // Relacionamento de Plano Atual
+  planId             String?
+  plan               Plan?              @relation(fields: [planId], references: [id])
+
+  // Relacionamentos
+  mediaKit           MediaKit?
+  proposals          Proposal[]
+  paymentOrders      PaymentOrder[]
+
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   @@map("users")
+}
+
+model Plan {
+  id                  String   @id @default(uuid())
+  name                String   // Ex: Inicial, Profissional, Agência
+  slug                String   @unique // ex: basic, pro, agency
+  priceUSD            Float
+  priceAOA            Float
+  priceBRL            Float
+  maxSocialNetworks   Int      // -1 para ilimitado
+  maxProposalsPerMonth Int     // -1 para ilimitado
+  customDomainAllowed Boolean  @default(false)
+  
+  users               User[]
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("plans")
+}
+
+model MediaKit {
+  id             String          @id @default(uuid())
+  userId         String          @unique
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  slug           String          @unique // URL pública personalizável
+  bio            String?         @db.Text
+  profilePicture String?
+  coverImage     String?
+  niche          String?         // Ex: Moda, Tec, Lifestyle
+  location       String?
+  isPublic       Boolean         @default(true)
+
+  socialNetworks SocialNetwork[]
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@map("media_kits")
+}
+
+model SocialNetwork {
+  id             String   @id @default(uuid())
+  mediaKitId     String
+  mediaKit       MediaKit @relation(fields: [mediaKitId], references: [id], onDelete: Cascade)
+
+  platform       String   // INSTAGRAM, TIKTOK, YOUTUBE, TWITTER, LINKEDIN
+  username       String
+  profileUrl     String?
+  followersCount Int      @default(0)
+  engagementRate Float    @default(0.0)
+  avgImpressions Int      @default(0)
+  lastSyncedAt   DateTime @default(now())
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("social_networks")
+}
+
+model Proposal {
+  id          String         @id @default(uuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  brandName   String
+  brandEmail  String?
+  title       String
+  description String?        @db.Text
+  totalAmount Float
+  currency    String         @default("USD") // USD, AOA, BRL
+  status      ProposalStatus @default(DRAFT)
+  validUntil  DateTime
+
+  items       ProposalItem[]
+
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@map("proposals")
+}
+
+model ProposalItem {
+  id          String   @id @default(uuid())
+  proposalId  String
+  proposal    Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  deliverable String   // Ex: 1x Reels + 2x Stories
+  quantity    Int      @default(1)
+  unitPrice   Float
+  totalPrice  Float
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("proposal_items")
+}
+
+model PaymentOrder {
+  id               String        @id @default(uuid())
+  userId           String
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  planId           String
+  amount           Float
+  currency         String        // USD, AOA
+  paymentMethod    PaymentMethod
+  status           PaymentStatus @default(PENDING)
+
+  // Dados para Pagamento Stripe (USD)
+  stripeSessionId  String?
+  
+  // Dados para Pagamento Manual Kwanza (AOA)
+  receiptUrl       String?       // Foto do comprovativo enviado pelo usuário (Cloudinary)
+  bankReference    String?
+  rejectionReason  String?
+  approvedAt       DateTime?
+
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@map("payment_orders")
 }
