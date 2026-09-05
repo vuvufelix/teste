@@ -6,6 +6,7 @@ import { env } from './config/env.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { mediaKitRoutes } from './routes/media-kit.routes.js';
 import { proposalRoutes } from './routes/proposal.routes.js';
+import { paymentRoutes } from './routes/payment.routes.js';
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use(cookieParser());
 app.use('/api/auth', authRoutes);
 app.use('/api/media-kit', mediaKitRoutes);
 app.use('/api/proposals', proposalRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Rota de Healthcheck
 app.get('/health', (req: Request, res: Response) => {
