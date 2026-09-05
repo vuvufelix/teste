@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { PaymentOrder } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
 import { reviewPaymentSchema, updateUserPlanSchema } from '../schemas/admin.schema.js';
@@ -16,17 +17,18 @@ export class AdminController {
     });
 
     // Buscar pagamentos aprovados para cálculo de receita acumulada
-    const approvedPayments = await prisma.paymentOrder.findMany({
+    const approvedPayments: PaymentOrder[] = await prisma.paymentOrder.findMany({
       where: { status: 'APPROVED' },
     });
 
+    // Tipagem explícita nos parâmetros dos métodos filter e reduce
     const totalRevenueUSD = approvedPayments
-      .filter((p) => p.currency === 'USD')
-      .reduce((acc, p) => acc + p.amount, 0);
+      .filter((p: PaymentOrder) => p.currency === 'USD')
+      .reduce((acc: number, p: PaymentOrder) => acc + p.amount, 0);
 
     const totalRevenueAOA = approvedPayments
-      .filter((p) => p.currency === 'AOA')
-      .reduce((acc, p) => acc + p.amount, 0);
+      .filter((p: PaymentOrder) => p.currency === 'AOA')
+      .reduce((acc: number, p: PaymentOrder) => acc + p.amount, 0);
 
     // Métricas por plano
     const planDistribution = await prisma.user.groupBy({
