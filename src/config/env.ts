@@ -10,6 +10,11 @@ const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(16, 'JWT_ACCESS_SECRET deve ter no mínimo 16 caracteres.'),
   JWT_REFRESH_SECRET: z.string().min(16, 'JWT_REFRESH_SECRET deve ter no mínimo 16 caracteres.'),
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
+
+  // Configurações do Cloudinary (Opcionais em ambiente de teste)
+  CLOUDINARY_CLOUD_NAME: z.string().optional().default('demo'),
+  CLOUDINARY_API_KEY: z.string().optional().default('123456789'),
+  CLOUDINARY_API_SECRET: z.string().optional().default('secret'),
 });
 
 const _env = envSchema.safeParse(process.env);
