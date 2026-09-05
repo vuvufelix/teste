@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import { env } from './config/env.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { mediaKitRoutes } from './routes/media-kit.routes.js';
+import { proposalRoutes } from './routes/proposal.routes.js';
 
 const app = express();
 
@@ -15,12 +16,13 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json({ limit: '10mb' })); // Limite expandido para suportar upload base64
+app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
 // Rotas da API
 app.use('/api/auth', authRoutes);
 app.use('/api/media-kit', mediaKitRoutes);
+app.use('/api/proposals', proposalRoutes);
 
 // Rota de Healthcheck
 app.get('/health', (req: Request, res: Response) => {
