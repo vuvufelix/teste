@@ -61,7 +61,7 @@ export async function ensureAdmin(
   }
 
   // ✅ Aceita tanto ADMIN quanto SUPER_ADMIN
-  const isAdmin = req.user.role === Role.ADMIN || req.user.role === Role.SUPER_ADMIN || req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
+  const isAdmin = req.user.role === Role.SUPER_ADMIN || req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
 
   if (!isAdmin) {
     return res.status(403).json({
@@ -83,7 +83,7 @@ export async function checkSubscriptionOrTrial(
   }
 
   // ✅ Administradores têm acesso livre ilimitado
-  const isAdmin = req.user.role === Role.ADMIN || req.user.role === Role.SUPER_ADMIN || req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
+  const isAdmin = req.user.role === Role.SUPER_ADMIN || req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
   if (isAdmin) {
     return next();
   }

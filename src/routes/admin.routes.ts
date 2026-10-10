@@ -13,5 +13,6 @@ adminRoutes.get('/payments/pending', AdminController.getPendingPayments);
 adminRoutes.post('/payments/:id/review', AdminController.reviewPaymentOrder);
 adminRoutes.get('/users', AdminController.listUsers);
 adminRoutes.patch('/users/:userId/plan', AdminController.updateUserPlan);
+adminRoutes.delete('/users/:userId', AdminController.deleteUser);
 
 export { adminRoutes };

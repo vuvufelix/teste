@@ -206,4 +206,38 @@ export class AdminController {
       user: updatedUser,
     });
   }
+
+  // Remover uma Agência ou Criador/Influenciador da plataforma
+  static async deleteUser(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { userId } = req.params;
+
+      // Impede que o Super Admin elimine a sua própria conta
+      if (req.user?.id === userId) {
+        return res.status(400).json({ error: 'Não é possível eliminar a sua própria conta de administrador.' });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, name: true, email: true, role: true },
+      });
+
+      if (!user) {
+        return res.status(404).json({ error: 'Usuário não encontrado na plataforma.' });
+      }
+
+      // Elimina o utilizador (graças ao onDelete: Cascade do Prisma, 
+      // as delegações, propostas, mídia kit e subscrições associadas são eliminadas em cascata)
+      await prisma.user.delete({
+        where: { id: userId },
+      });
+
+      return res.status(200).json({
+        message: `O utilizador "${user.name}" (${user.role}) foi removido da plataforma com sucesso.`,
+      });
+    } catch (error) {
+      console.error('Erro ao eliminar usuário:', error);
+      return res.status(500).json({ error: 'Ocorreu um erro ao tentar eliminar o usuário.' });
+    }
+  }
 }

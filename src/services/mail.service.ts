@@ -20,7 +20,7 @@ export class MailService {
     const influkitLogoUrl = 'https://raw.githubusercontent.com/uizard-assets/public/main/influkit-logo.png';
 
     const mailOptions = {
-      from: `"Influkit" <${process.env.SMTP_USER}>`,
+      from: `"Influkit Suporte" <${process.env.SMTP_USER}>`,
       to: email,
       subject: '🔑 Redefinição de Senha - Influkit',
       html: `
@@ -106,7 +106,7 @@ export class MailService {
     const influkitLogoUrl = 'https://raw.githubusercontent.com/uizard-assets/public/main/influkit-logo.png';
 
     const mailOptions = {
-      from: `"Influkit" <${process.env.SMTP_USER}>`,
+      from: `"Influkit Equipa" <${process.env.SMTP_USER}>`,
       to: email,
       subject: '🚀 Bem-vindo ao Influkit! O seu Mídia Kit está pronto',
       html: `
@@ -163,7 +163,9 @@ export class MailService {
     const influkitLogoUrl = 'https://raw.githubusercontent.com/uizard-assets/public/main/influkit-logo.png';
 
     const mailOptions = {
-      from: `"${data.creatorName} via Influkit" <${process.env.SMTP_USER}>`,
+      // Correção chave anti-spam: O 'from' usa o e-mail autenticado do SMTP, 
+      // enquanto o 'replyTo' direciona as respostas diretamente para o e-mail do criador.
+      from: `"Influkit Propostas" <${process.env.SMTP_USER}>`,
       to: data.brandEmail,
       replyTo: `"${data.creatorName}" <${data.creatorEmail}>`,
       subject: `Proposta Comercial: ${data.proposalTitle}`,
@@ -197,7 +199,7 @@ export class MailService {
                   </tr>
                   <tr>
                     <td style="background-color: #F8FAFC; padding: 16px 40px; text-align: center; border-top: 1px solid #F1F5F9;">
-                      <p style="margin: 0; color: #94A3B8; font-size: 12px;">Enviado por ${data.creatorName} através da plataforma Influkit.</p>
+                      <p style="margin: 0; color: #94A3B8; font-size: 12px;">Proposta enviada por ${data.creatorName} através da plataforma Influkit.</p>
                     </td>
                   </tr>
                 </table>
