@@ -1,5 +1,23 @@
--- AlterTable
-ALTER TABLE `users` ADD COLUMN `planId` VARCHAR(191) NULL;
+-- CreateTable
+CREATE TABLE `users` (
+    `id` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `email` VARCHAR(191) NOT NULL,
+    `passwordHash` VARCHAR(191) NOT NULL,
+    `role` ENUM('INFLUENCER', 'AGENCY', 'SUPER_ADMIN') NOT NULL DEFAULT 'INFLUENCER',
+    `subscriptionStatus` ENUM('INACTIVE', 'ACTIVE', 'EXPIRED', 'CANCELED', 'TRIALING') NOT NULL DEFAULT 'INACTIVE',
+    `trialEndsAt` DATETIME(3) NULL,
+    `subscriptionEndsAt` DATETIME(3) NULL,
+    `refreshTokenHash` VARCHAR(191) NULL,
+    `resetPasswordTokenHash` VARCHAR(191) NULL,
+    `resetPasswordExpiresAt` DATETIME(3) NULL,
+    `planId` VARCHAR(191) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `users_email_key`(`email`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `plans` (
@@ -9,6 +27,7 @@ CREATE TABLE `plans` (
     `priceUSD` DOUBLE NOT NULL,
     `priceAOA` DOUBLE NOT NULL,
     `priceBRL` DOUBLE NOT NULL,
+    `durationInDays` INTEGER NOT NULL DEFAULT 30,
     `maxSocialNetworks` INTEGER NOT NULL,
     `maxProposalsPerMonth` INTEGER NOT NULL,
     `customDomainAllowed` BOOLEAN NOT NULL DEFAULT false,
@@ -124,3 +143,6 @@ ALTER TABLE `proposal_items` ADD CONSTRAINT `proposal_items_proposalId_fkey` FOR
 
 -- AddForeignKey
 ALTER TABLE `payment_orders` ADD CONSTRAINT `payment_orders_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `payment_orders` ADD CONSTRAINT `payment_orders_planId_fkey` FOREIGN KEY (`planId`) REFERENCES `plans`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

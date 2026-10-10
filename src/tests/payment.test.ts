@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
 import app from '../app.js';
 import { prisma } from '../config/prisma.js';
@@ -78,5 +78,9 @@ describe('Módulo de Pagamentos (Stripe + Kwanza Manual)', () => {
 
     const userUpdated = await prisma.user.findUnique({ where: { id: userId } });
     expect(userUpdated?.subscriptionStatus).toBe('ACTIVE');
+
+    afterAll(async () => {
+    await prisma.$disconnect();
+    });
   });
 });

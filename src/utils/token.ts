@@ -2,13 +2,13 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 
 interface TokenPayload {
-  sub: string;
+  userId: string;
   role: string;
 }
 
 export function generateAccessToken(payload: TokenPayload): string {
   return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
-    expiresIn: '15m',
+    expiresIn: '7d',
   });
 }
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterAll } from 'vitest';
 import request from 'supertest';
 import app from '../app.js';
 import { prisma } from '../config/prisma.js';
@@ -12,8 +12,15 @@ describe('Autenticação e Regras de Negócio de Trial', () => {
   };
 
   beforeEach(async () => {
-    // Limpa banco simulado ou de testes
-    await prisma.user.deleteMany({ where: { email: testUser.email } });
+    await prisma.socialNetwork.deleteMany();
+    await prisma.mediaKit.deleteMany();
+    await prisma.paymentOrder.deleteMany();
+    await prisma.user.deleteMany();
+  });
+
+  // Desconecta o Prisma para que a thread nativa do C++ encerre sem dar crash
+  afterAll(async () => {
+    await prisma.$disconnect();
   });
 
   it('Deve registrar um novo usuário com 14 dias de Trial automático', async () => {

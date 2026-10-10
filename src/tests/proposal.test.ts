@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
 import app from '../app.js';
+import { prisma } from '../config/prisma.js';
 
 describe('Módulo de Propostas Comerciais', () => {
   let token: string;
@@ -61,5 +62,9 @@ describe('Módulo de Propostas Comerciais', () => {
     expect(pdfRes.text).toContain('PROPOSTA COMERCIAL');
     expect(pdfRes.text).toContain('Adidas');
     expect(pdfRes.text).toContain('400.00 USD');
+
+    afterAll(async () => {
+    await prisma.$disconnect();
+    });
   });
 });

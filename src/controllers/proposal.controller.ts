@@ -184,4 +184,73 @@ export class ProposalController {
 
     return res.status(200).json({ message: 'Proposta comercial excluída com sucesso.' });
   }
+
+  /**
+   * Gera e faz o download direto do PDF da Proposta Comercial
+   */
+  static async downloadProposalPDF(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+
+      // 1. Busca a proposta no banco com os itens e o criador
+      const proposal = await prisma.proposal.findUnique({
+        where: { id },
+        include: {
+          items: true,
+          user: {
+            select: {
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      if (!proposal) {
+        return res.status(404).json({ error: 'Proposta não encontrada.' });
+      }
+
+      // Regra de segurança: garante que a proposta pertence ao usuário autenticado
+      if (req.user && proposal.userId !== req.user.id && req.user.role !== 'SUPER_ADMIN') {
+        return res.status(403).json({ error: 'Acesso negado a esta proposta.' });
+      }
+
+      // 2. Prepara os dados formatados para o PDFService
+      const pdfData = {
+        id: proposal.id,
+        title: proposal.title,
+        brandName: proposal.brandName,
+        brandEmail: proposal.brandEmail,
+        description: proposal.description,
+        currency: proposal.currency,
+        totalAmount: proposal.totalAmount,
+        validUntil: proposal.validUntil,
+        createdAt: proposal.createdAt,
+        creatorName: proposal.user.name,
+        creatorEmail: proposal.user.email,
+        items: proposal.items.map((item) => ({
+          deliverable: item.deliverable,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+        })),
+      };
+
+      // 3. Gera o Buffer do PDF usando Puppeteer
+      const pdfBuffer = await PDFService.generateProposalPDFBuffer(pdfData);
+
+      // 4. Configura as Headers do Express para o download no navegador
+      const fileName = `Proposta_Influkit_${proposal.brandName.replace(/\s+/g, '_')}_${proposal.id.substring(0, 8)}.pdf`;
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+
+      // 5. Envia o Buffer binário direto para a resposta
+      return res.end(pdfBuffer);
+    } catch (error) {
+      console.error('Erro ao gerar PDF da proposta:', error);
+      return res.status(500).json({ error: 'Erro ao gerar o arquivo PDF.' });
+    }
+  }
 }

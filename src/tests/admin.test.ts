@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
+import { Role, SubscriptionStatus } from '@prisma/client'; // <-- Importando os Enums
 import app from '../app.js';
 import { prisma } from '../config/prisma.js';
 
@@ -8,31 +9,41 @@ describe('Módulo Administrativo (Super Admin)', () => {
   let userToken: string;
   let normalUserId: string;
 
-  beforeEach(async () => {
+  // admin.test.ts
+    beforeEach(async () => {
+    // Limpeza
+    await prisma.paymentOrder.deleteMany();
+    await prisma.user.deleteMany();
+
     // 1. Criar usuário Administrador
     const adminRes = await request(app).post('/api/auth/register').send({
-      name: 'Super Admin',
-      email: `admin_${Date.now()}@teste.com`,
-      password: 'password123',
+        name: 'Super Admin',
+        email: `admin_${Date.now()}@teste.com`,
+        password: 'password123',
     });
 
     adminToken = adminRes.body.accessToken;
 
-    // Promover manualmente o usuário a ADMIN no DB para o teste
+    // Promover a SUPER_ADMIN no banco
     await prisma.user.update({
-      where: { id: adminRes.body.user.id },
-      data: { role: 'ADMIN' },
+        where: { id: adminRes.body.user.id },
+        data: { role: Role.SUPER_ADMIN },
     });
 
     // 2. Criar usuário Normal
     const userRes = await request(app).post('/api/auth/register').send({
-      name: 'Usuario Comum',
-      email: `user_${Date.now()}@teste.com`,
-      password: 'password123',
+        name: 'Usuario Comum',
+        email: `user_${Date.now()}@teste.com`,
+        password: 'password123',
     });
 
     userToken = userRes.body.accessToken;
     normalUserId = userRes.body.user.id;
+    });
+
+  // Desconecta o Prisma para que a thread nativa do C++ encerre sem dar crash
+  afterAll(async () => {
+    await prisma.$disconnect();
   });
 
   it('Deve bloquear acesso de usuários não-administradores às rotas do Admin', async () => {
@@ -81,8 +92,8 @@ describe('Módulo Administrativo (Super Admin)', () => {
 
     expect(res.status).toBe(200);
 
-    // Confirmar que o status do usuário mudou para ACTIVE
+    // Confirmar que o status do usuário mudou para ACTIVE usando o Enum
     const updatedUser = await prisma.user.findUnique({ where: { id: normalUserId } });
-    expect(updatedUser?.subscriptionStatus).toBe('ACTIVE');
+    expect(updatedUser?.subscriptionStatus).toBe(SubscriptionStatus.ACTIVE); // <-- Corrigido aqui também
   });
 });

@@ -18,5 +18,6 @@ mediaKitRoutes.post('/me/images', MediaKitController.uploadImage);
 mediaKitRoutes.post('/social-networks', MediaKitController.addSocialNetwork);
 mediaKitRoutes.put('/social-networks/:id', MediaKitController.updateSocialNetwork);
 mediaKitRoutes.delete('/social-networks/:id', MediaKitController.deleteSocialNetwork);
+mediaKitRoutes.post('/social-networks/:id/sync', MediaKitController.syncSocialNetwork);
 
 export { mediaKitRoutes };

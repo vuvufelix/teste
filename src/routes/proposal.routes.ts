@@ -13,5 +13,6 @@ proposalRoutes.get('/:id', ProposalController.getProposalById);
 proposalRoutes.patch('/:id/status', ProposalController.updateStatus);
 proposalRoutes.get('/:id/pdf', ProposalController.renderProposalPDF);
 proposalRoutes.delete('/:id', ProposalController.deleteProposal);
+proposalRoutes.get('/:id/pdf', ProposalController.downloadProposalPDF);
 
 export { proposalRoutes };

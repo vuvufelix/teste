@@ -12,12 +12,18 @@ import { adminRoutes } from './routes/admin.routes.js';
 const app = express();
 
 app.use(helmet());
-app.use(
-  cors({
-    origin: env.FRONTEND_URL,
-    credentials: true,
-  })
-);
+// app.use(
+//   cors({
+//     origin: env.FRONTEND_URL,
+//     credentials: true,
+//   })
+// );
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:3001'], // Permite ambas as portas
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 

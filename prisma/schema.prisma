@@ -14,11 +14,11 @@ enum Role {
 }
 
 enum SubscriptionStatus {
-  TRIALING
+  INACTIVE
   ACTIVE
-  CANCELED
-  PAST_DUE
   EXPIRED
+  CANCELED
+  TRIALING
 }
 
 enum PaymentMethod {
@@ -45,9 +45,14 @@ model User {
   email              String             @unique
   passwordHash       String
   role               Role               @default(INFLUENCER)
-  subscriptionStatus SubscriptionStatus @default(TRIALING)
-  trialEndsAt        DateTime
+  subscriptionStatus SubscriptionStatus @default(INACTIVE)
+  trialEndsAt        DateTime?
+  subscriptionEndsAt DateTime?
   refreshTokenHash   String?
+
+  // Campos para Recuperação de Senha
+  resetPasswordTokenHash String?            // Token hash para redefinição
+  resetPasswordExpiresAt DateTime?          // Data de expiração do token
 
   // Relacionamento de Plano Atual
   planId             String?
@@ -65,20 +70,22 @@ model User {
 }
 
 model Plan {
-  id                  String   @id @default(uuid())
-  name                String   // Ex: Inicial, Profissional, Agência
-  slug                String   @unique // ex: basic, pro, agency
-  priceUSD            Float
-  priceAOA            Float
-  priceBRL            Float
-  maxSocialNetworks   Int      // -1 para ilimitado
-  maxProposalsPerMonth Int     // -1 para ilimitado
-  customDomainAllowed Boolean  @default(false)
+  id                   String   @id @default(uuid())
+  name                 String   // Ex: Inicial, Profissional, Agência
+  slug                 String   @unique // ex: basic, pro, agency
+  priceUSD             Float
+  priceAOA             Float
+  priceBRL             Float
+  durationInDays       Int      @default(30) // <--- Adicionado (Ex: 30, 90, 365)
+  maxSocialNetworks    Int      // -1 para ilimitado
+  maxProposalsPerMonth Int      // -1 para ilimitado
+  customDomainAllowed  Boolean  @default(false)
   
-  users               User[]
+  users                User[]
+  paymentOrders        PaymentOrder[] // <--- Adicionado o relacionamento inverso
 
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   @@map("plans")
 }
@@ -112,8 +119,11 @@ model SocialNetwork {
   platform       String   // INSTAGRAM, TIKTOK, YOUTUBE, TWITTER, LINKEDIN
   username       String
   profileUrl     String?
+  handle         String?
   followersCount Int      @default(0)
   engagementRate Float    @default(0.0)
+  monthlyViews    Int?     @default(0)
+  lastUpdated     DateTime @default(now())
   avgImpressions Int      @default(0)
   lastSyncedAt   DateTime @default(now())
 
@@ -167,6 +177,7 @@ model PaymentOrder {
   user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   planId           String
+  plan             Plan          @relation(fields: [planId], references: [id]) // <--- Adicionado aqui!
   amount           Float
   currency         String        // USD, AOA
   paymentMethod    PaymentMethod

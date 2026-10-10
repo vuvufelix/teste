@@ -9,5 +9,7 @@ authRoutes.post('/login', AuthController.login);
 authRoutes.post('/refresh', AuthController.refreshToken);
 authRoutes.post('/logout', ensureAuthenticated, AuthController.logout);
 authRoutes.get('/me', ensureAuthenticated, AuthController.me);
+authRoutes.post('/forgot-password', AuthController.forgotPassword);
+authRoutes.post('/reset-password', AuthController.resetPassword);
 
 export { authRoutes };

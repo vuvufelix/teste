@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { PaymentOrder } from '@prisma/client';
+import { PaymentOrder, SubscriptionStatus } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
 import { reviewPaymentSchema, updateUserPlanSchema } from '../schemas/admin.schema.js';
@@ -9,7 +9,7 @@ export class AdminController {
   static async getDashboardStats(req: AuthenticatedRequest, res: Response) {
     const totalUsers = await prisma.user.count();
     const activeSubscriptions = await prisma.user.count({
-      where: { subscriptionStatus: 'ACTIVE' },
+      where: { subscriptionStatus: SubscriptionStatus.ACTIVE },
     });
 
     const pendingPaymentsCount = await prisma.paymentOrder.count({
@@ -21,7 +21,6 @@ export class AdminController {
       where: { status: 'APPROVED' },
     });
 
-    // Tipagem explícita nos parâmetros dos métodos filter e reduce
     const totalRevenueUSD = approvedPayments
       .filter((p: PaymentOrder) => p.currency === 'USD')
       .reduce((acc: number, p: PaymentOrder) => acc + p.amount, 0);
@@ -52,18 +51,22 @@ export class AdminController {
 
   // Listar ordens de pagamento pendentes de análise manual (AOA)
   static async getPendingPayments(req: AuthenticatedRequest, res: Response) {
-    const pendingOrders = await prisma.paymentOrder.findMany({
-      where: { status: 'PENDING' },
-      include: {
-        user: {
-          select: { id: true, name: true, email: true },
+    try {
+      const pendingOrders = await prisma.paymentOrder.findMany({
+        where: { status: 'PENDING' },
+        include: {
+          user: {
+            select: { id: true, name: true, email: true },
+          },
         },
-        plan: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+      });
 
-    return res.status(200).json({ pendingOrders });
+      return res.status(200).json({ pendingOrders });
+    } catch (error) {
+      console.error('Erro ao listar pagamentos pendentes:', error);
+      return res.status(500).json({ error: 'Erro ao buscar ordens de pagamento.' });
+    }
   }
 
   // Aprovar ou Rejeitar Pagamento em Kwanza (AOA)
@@ -105,7 +108,7 @@ export class AdminController {
           where: { id: order.userId },
           data: {
             planId: order.planId,
-            subscriptionStatus: 'ACTIVE',
+            subscriptionStatus: SubscriptionStatus.ACTIVE,
           },
         }),
       ]);
@@ -179,11 +182,15 @@ export class AdminController {
       return res.status(404).json({ error: 'Plano não encontrado.' });
     }
 
+    const formattedStatus = (
+      subscriptionStatus === 'CANCELLED' ? 'CANCELED' : subscriptionStatus
+    ) as SubscriptionStatus;
+
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: {
         planId: plan.id,
-        subscriptionStatus,
+        subscriptionStatus: formattedStatus,
       },
       select: {
         id: true,

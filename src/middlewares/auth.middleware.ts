@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { SubscriptionStatus, Role } from '@prisma/client';
 import { env } from '../config/env.js';
 import { prisma } from '../config/prisma.js';
 
@@ -32,6 +33,10 @@ export async function ensureAuthenticated(
   try {
     const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as JwtPayload;
 
+    if (!decoded || !decoded.userId) {
+      return res.status(401).json({ error: 'Token com payload inválido.' });
+    }
+
     req.user = {
       id: decoded.userId,
       role: decoded.role,
@@ -39,11 +44,13 @@ export async function ensureAuthenticated(
 
     return next();
   } catch (error) {
+    // Log útil no terminal para entender por que o JWT falhou durante o desenvolvimento
+    console.error('❌ Erro na validação do JWT:', (error as Error).message);
     return res.status(401).json({ error: 'Token de acesso inválido ou expirado.' });
   }
 }
 
-// 2. Garante que o usuário autenticado possui perfil de Administrador (ADMIN)
+// 2. Garante que o usuário autenticado possui perfil de Administrador (ADMIN ou SUPER_ADMIN)
 export async function ensureAdmin(
   req: AuthenticatedRequest,
   res: Response,
@@ -53,7 +60,10 @@ export async function ensureAdmin(
     return res.status(401).json({ error: 'Não autenticado.' });
   }
 
-  if (req.user.role !== 'ADMIN') {
+  // ✅ Aceita tanto ADMIN quanto SUPER_ADMIN
+  const isAdmin = req.user.role === Role.ADMIN || req.user.role === Role.SUPER_ADMIN || req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
+
+  if (!isAdmin) {
     return res.status(403).json({
       error: 'Acesso negado. Apenas administradores têm permissão para acessar esta funcionalidade.',
     });
@@ -68,34 +78,42 @@ export async function checkSubscriptionOrTrial(
   res: Response,
   next: NextFunction
 ) {
-  if (!req.user) {
+  if (!req.user || !req.user.id) {
     return res.status(401).json({ error: 'Não autenticado.' });
   }
 
-  // Administradores têm acesso livre ilimitado
-  if (req.user.role === 'ADMIN') {
+  // ✅ Administradores têm acesso livre ilimitado
+  const isAdmin = req.user.role === Role.ADMIN || req.user.role === Role.SUPER_ADMIN || req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
+  if (isAdmin) {
     return next();
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: req.user.id },
-    select: { subscriptionStatus: { select: { isTrialing: true, status: true } }, trialEndsAt: true },
-  });
-
-  if (!user) {
-    return res.status(404).json({ error: 'Usuário não encontrado.' });
-  }
-
-  const now = new Date();
-  const isTrialValid = user.trialEndsAt && new Date(user.trialEndsAt) > now;
-  const isSubscriptionActive = user.subscriptionStatus?.status === 'ACTIVE';
-
-  if (!isTrialValid && !isSubscriptionActive) {
-    return res.status(402).json({
-      error: 'Seu período de avaliação gratuita expirou. Por favor, assine um plano para continuar utilizando este serviço.',
-      code: 'SUBSCRIPTION_EXPIRED',
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { 
+        subscriptionStatus: true, 
+        trialEndsAt: true 
+      },
     });
-  }
 
-  return next();
+    if (!user) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    const now = new Date();
+    const isTrialValid = user.trialEndsAt && new Date(user.trialEndsAt) > now;
+    const isSubscriptionActive = user.subscriptionStatus === SubscriptionStatus.ACTIVE;
+
+    if (!isTrialValid && !isSubscriptionActive) {
+      return res.status(402).json({
+        error: 'Seu período de avaliação gratuita expirou. Por favor, assine um plano para continuar utilizando este serviço.',
+        code: 'SUBSCRIPTION_EXPIRED',
+      });
+    }
+
+    return next();
+  } catch (error) {
+    return next(error);
+  }
 }
