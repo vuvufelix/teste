@@ -63,6 +63,9 @@ model User {
   proposals          Proposal[]
   paymentOrders      PaymentOrder[]
 
+  agencyDelegations AgencyDelegation[] @relation("AgencyToCreators")
+  creatorDelegations AgencyDelegation[] @relation("CreatorToAgencies")
+
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
@@ -199,4 +202,16 @@ model PaymentOrder {
   updatedAt        DateTime      @updatedAt
 
   @@map("payment_orders")
+}
+
+model AgencyDelegation {
+  id         String   @id @default(uuid())
+  agencyId   String
+  agency     User     @relation("AgencyToCreators", fields: [agencyId], references: [id])
+  creatorId  String
+  creator    User     @relation("CreatorToAgencies", fields: [creatorId], references: [id])
+  status     String   @default("PENDING") // PENDING, ACCEPTED, REVOKED
+  createdAt  DateTime @default(now())
+
+  @@unique([agencyId, creatorId])
 }

@@ -11,6 +11,33 @@ import { CloudinaryService } from '../services/cloudinary.service.js';
 import { FetchedSocialStats, SocialStatsService } from "../services/social-stats.service.js"
 
 export class MediaKitController {
+  // 🎯 Helper privado para resolver o ID do utilizador alvo (suporta agências com delegação aceite)
+  private static async resolveTargetUserId(req: AuthenticatedRequest): Promise<string | null> {
+    if (!req.user) return null;
+
+    let targetUserId = req.user.id;
+    const requestedCreatorId = (req.headers['x-target-creator-id'] as string) || req.body?.creatorId;
+
+    if (req.user.role === 'AGENCY' && requestedCreatorId) {
+      const delegation = await prisma.agencyDelegation.findUnique({
+        where: {
+          agencyId_creatorId: {
+            agencyId: req.user.id,
+            creatorId: requestedCreatorId,
+          },
+        },
+      });
+
+      if (!delegation || delegation.status !== 'ACCEPTED') {
+        return null; // Não autorizado ou sem delegação aceite
+      }
+
+      targetUserId = requestedCreatorId;
+    }
+
+    return targetUserId;
+  }
+
   // Helper privado para verificar se o utilizador tem acesso total (Trial, Active ou Super Admin)
   private static hasFullAccess(user: { subscriptionStatus?: string | null; role?: string | null }) {
     if (user.role === 'SUPER_ADMIN') return true;
@@ -18,20 +45,25 @@ export class MediaKitController {
     return false;
   }
 
-  // Busca ou cria automaticamente o Mídia Kit do usuário logado
+  // Busca ou cria automaticamente o Mídia Kit do usuário logado ou do criador delegado
   static async getMyMediaKit(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
 
+    const targetUserId = await MediaKitController.resolveTargetUserId(req);
+    if (!targetUserId) {
+      return res.status(403).json({ error: 'Acesso negado ou delegação não autorizada para este criador.' });
+    }
+
     let mediaKit = await prisma.mediaKit.findUnique({
-      where: { userId: req.user.id },
+      where: { userId: targetUserId },
       include: { socialNetworks: true },
     });
 
     if (!mediaKit) {
-      const defaultSlug = `creator-${req.user.id.substring(0, 8)}`;
+      const defaultSlug = `creator-${targetUserId.substring(0, 8)}`;
       mediaKit = await prisma.mediaKit.create({
         data: {
-          userId: req.user.id,
+          userId: targetUserId,
           slug: defaultSlug,
           isPublic: true,
         },
@@ -46,6 +78,11 @@ export class MediaKitController {
   static async updateMyMediaKit(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
 
+    const targetUserId = await MediaKitController.resolveTargetUserId(req);
+    if (!targetUserId) {
+      return res.status(403).json({ error: 'Acesso negado ou delegação não autorizada para este criador.' });
+    }
+
     const parseResult = updateMediaKitSchema.safeParse(req.body);
     if (!parseResult.success) {
       return res.status(400).json({
@@ -57,16 +94,13 @@ export class MediaKitController {
     const { slug, bio, niche, location, isPublic, customDomain } = parseResult.data as any;
 
     const userWithPlan = await prisma.user.findUnique({
-      where: { id: req.user.id },
+      where: { id: targetUserId },
       include: { plan: true },
     });
 
     if (customDomain) {
-      // Durante o trial ou com plano ativo/admin, permite testar domínios personalizados
       const hasAccess = userWithPlan ? MediaKitController.hasFullAccess(userWithPlan) : false;
       const isDomainAllowed = userWithPlan?.plan?.customDomainAllowed;
-
-      // Se estiver em trial, permitimos testar. Caso contrário, validamos o plano.
       const isInTrial = userWithPlan?.subscriptionStatus === 'TRIALING';
 
       if (!isInTrial && (!hasAccess || !isDomainAllowed)) {
@@ -80,7 +114,7 @@ export class MediaKitController {
     const existingSlug = await prisma.mediaKit.findFirst({
       where: {
         slug,
-        NOT: { userId: req.user.id },
+        NOT: { userId: targetUserId },
       },
     });
 
@@ -89,9 +123,9 @@ export class MediaKitController {
     }
 
     const updatedMediaKit = await prisma.mediaKit.upsert({
-      where: { userId: req.user.id },
+      where: { userId: targetUserId },
       update: { slug, bio, niche, location, isPublic, ...(customDomain !== undefined && { customDomain }) },
-      create: { userId: req.user.id, slug, bio, niche, location, isPublic, customDomain },
+      create: { userId: targetUserId, slug, bio, niche, location, isPublic, customDomain },
       include: { socialNetworks: true },
     });
 
@@ -101,6 +135,11 @@ export class MediaKitController {
   // Upload de Imagens do Mídia Kit (Perfil/Capa)
   static async uploadImage(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
+
+    const targetUserId = await MediaKitController.resolveTargetUserId(req);
+    if (!targetUserId) {
+      return res.status(403).json({ error: 'Acesso negado ou delegação não autorizada para este criador.' });
+    }
 
     const parseResult = uploadImageSchema.safeParse(req.body);
     if (!parseResult.success) {
@@ -117,9 +156,9 @@ export class MediaKitController {
       imageType === 'PROFILE' ? { profilePicture: imageUrl } : { coverImage: imageUrl };
 
     const updatedMediaKit = await prisma.mediaKit.upsert({
-      where: { userId: req.user.id },
+      where: { userId: targetUserId },
       update: updateData,
-      create: { userId: req.user.id, slug: `creator-${req.user.id.substring(0, 8)}`, ...updateData },
+      create: { userId: targetUserId, slug: `creator-${targetUserId.substring(0, 8)}`, ...updateData },
     });
 
     return res.status(200).json({
@@ -154,6 +193,11 @@ export class MediaKitController {
   static async addSocialNetwork(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
 
+    const targetUserId = await MediaKitController.resolveTargetUserId(req);
+    if (!targetUserId) {
+      return res.status(403).json({ error: 'Acesso negado ou delegação não autorizada para este criador.' });
+    }
+
     const parseResult = addSocialNetworkSchema.safeParse(req.body);
     if (!parseResult.success) {
       return res.status(400).json({
@@ -174,23 +218,22 @@ export class MediaKitController {
     } = parseResult.data as any;
 
     let mediaKit = await prisma.mediaKit.findUnique({
-      where: { userId: req.user.id },
+      where: { userId: targetUserId },
       include: { socialNetworks: true },
     });
 
     if (!mediaKit) {
       mediaKit = await prisma.mediaKit.create({
-        data: { userId: req.user.id, slug: `creator-${req.user.id.substring(0, 8)}` },
+        data: { userId: targetUserId, slug: `creator-${targetUserId.substring(0, 8)}` },
         include: { socialNetworks: true },
       });
     }
 
     const userWithPlan = await prisma.user.findUnique({
-      where: { id: req.user.id },
+      where: { id: targetUserId },
       include: { plan: true },
     });
 
-    // 🔒 Verificação de Status da Assinatura (Bloqueia se inativa e NÃO estiver em trial)
     const subscriptionStatus = userWithPlan?.subscriptionStatus;
     const isSuperAdmin = userWithPlan?.role === 'SUPER_ADMIN';
     const isTrialing = subscriptionStatus === 'TRIALING';
@@ -203,7 +246,6 @@ export class MediaKitController {
       });
     }
 
-    // 📏 Verificação de Limites do Plano (Se NÃO estiver em trial e NÃO for Super Admin, aplica o limite do plano)
     if (!isTrialing && !isSuperAdmin && userWithPlan?.plan && userWithPlan.plan.maxSocialNetworks !== -1) {
       if (mediaKit.socialNetworks.length >= userWithPlan.plan.maxSocialNetworks) {
         return res.status(403).json({
@@ -213,7 +255,6 @@ export class MediaKitController {
       }
     }
 
-    // 🚀 BUSCA AUTOMÁTICA DAS MÉTRICAS SE O SEGUIDOR NÃO FOI INFORMADO MANUALMENTE
     let autoStats: FetchedSocialStats = { followersCount: 0, engagementRate: 0, monthlyViews: 0, handle: customUsername || '' };
     
     if ((!manualFollowers || manualFollowers === 0) && profileUrl) {
@@ -227,7 +268,6 @@ export class MediaKitController {
     const handleValue = customUsername || autoStats.handle || '';
     const cleanUsername = handleValue.replace('@', '');
 
-    // Salva a rede social combinando Automático + Manual
     const newSocialNetwork = await prisma.socialNetwork.create({
       data: {
         mediaKitId: mediaKit.id,
@@ -250,10 +290,15 @@ export class MediaKitController {
     });
   }
 
-  // Atualizar Rede Social existente
+  // Atualizar Rede Social existente (Validando propriedade ou delegação)
   static async updateSocialNetwork(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
     const { id } = req.params;
+
+    const targetUserId = await MediaKitController.resolveTargetUserId(req);
+    if (!targetUserId) {
+      return res.status(403).json({ error: 'Acesso negado ou delegação não autorizada.' });
+    }
 
     const parseResult = updateSocialNetworkSchema.safeParse(req.body);
     if (!parseResult.success) {
@@ -268,7 +313,7 @@ export class MediaKitController {
       include: { mediaKit: true },
     });
 
-    if (!socialNetwork || socialNetwork.mediaKit.userId !== req.user.id) {
+    if (!socialNetwork || socialNetwork.mediaKit.userId !== targetUserId) {
       return res.status(404).json({ error: 'Rede social não encontrada ou sem permissão.' });
     }
 
@@ -285,12 +330,17 @@ export class MediaKitController {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
     const { id } = req.params;
 
+    const targetUserId = await MediaKitController.resolveTargetUserId(req);
+    if (!targetUserId) {
+      return res.status(403).json({ error: 'Acesso negado ou delegação não autorizada.' });
+    }
+
     const socialNetwork = await prisma.socialNetwork.findUnique({
       where: { id },
       include: { mediaKit: true },
     });
 
-    if (!socialNetwork || socialNetwork.mediaKit.userId !== req.user.id) {
+    if (!socialNetwork || socialNetwork.mediaKit.userId !== targetUserId) {
       return res.status(404).json({ error: 'Rede social não encontrada ou sem permissão.' });
     }
 
@@ -304,12 +354,17 @@ export class MediaKitController {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
     const { id } = req.params;
 
+    const targetUserId = await MediaKitController.resolveTargetUserId(req);
+    if (!targetUserId) {
+      return res.status(403).json({ error: 'Acesso negado ou delegação não autorizada.' });
+    }
+
     const socialNetwork = await prisma.socialNetwork.findUnique({
       where: { id },
       include: { mediaKit: true },
     });
 
-    if (!socialNetwork || socialNetwork.mediaKit.userId !== req.user.id) {
+    if (!socialNetwork || socialNetwork.mediaKit.userId !== targetUserId) {
       return res.status(404).json({ error: 'Rede social não encontrada ou sem permissão.' });
     }
 

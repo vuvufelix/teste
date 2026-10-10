@@ -7,7 +7,7 @@ import { AIService } from "../services/ai.service.js";
 import { MailService } from "../services/mail.service.js";
 
 export class ProposalController {
-  // Criar Proposta Comercial
+  // Criar Proposta Comercial (Com suporte a Agências e Delegação)
   static async createProposal(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
 
@@ -21,9 +21,33 @@ export class ProposalController {
 
     const { brandName, brandEmail, title, description, currency, validUntil, items } = parseResult.data;
 
-    // Busca os dados do utilizador, plano e status da assinatura
+    // 🎯 Lógica de Agência: Determinar o ID alvo da proposta
+    let targetUserId = req.user.id;
+    const requestedCreatorId = (req.headers['x-target-creator-id'] as string) || req.body.creatorId;
+
+    if (req.user.role === 'AGENCY' && requestedCreatorId) {
+      const delegation = await prisma.agencyDelegation.findUnique({
+        where: {
+          agencyId_creatorId: {
+            agencyId: req.user.id,
+            creatorId: requestedCreatorId,
+          },
+        },
+      });
+
+      if (!delegation || delegation.status !== 'ACCEPTED') {
+        return res.status(403).json({
+          error: 'Não tem permissão de gestão ativa para este criador.',
+          code: 'DELEGATION_NOT_AUTHORIZED',
+        });
+      }
+
+      targetUserId = requestedCreatorId;
+    }
+
+    // Busca os dados do utilizador (criador ou agência), plano e status da assinatura
     const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
+      where: { id: targetUserId },
       include: { plan: true },
     });
 
@@ -48,14 +72,14 @@ export class ProposalController {
 
       const proposalsCount = await prisma.proposal.count({
         where: {
-          userId: req.user.id,
+          userId: targetUserId,
           createdAt: { gte: firstDayOfMonth },
         },
       });
 
       if (proposalsCount >= user.plan.maxProposalsPerMonth) {
         return res.status(403).json({
-          error: `Seu plano atual permite gerar no máximo ${user.plan.maxProposalsPerMonth} propostas por mês. Faça upgrade do seu plano para propostas ilimitadas.`,
+          error: `O plano atual permite gerar no máximo ${user.plan.maxProposalsPerMonth} propostas por mês. Faça upgrade do seu plano para propostas ilimitadas.`,
           code: 'PROPOSAL_LIMIT_REACHED',
         });
       }
@@ -73,7 +97,7 @@ export class ProposalController {
 
     const proposal = await prisma.proposal.create({
       data: {
-        userId: req.user.id,
+        userId: targetUserId, // Associa a proposta ao criador correto (ou ao próprio utilizador se for criador individual)
         brandName,
         brandEmail,
         title,

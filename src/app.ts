@@ -8,6 +8,7 @@ import { mediaKitRoutes } from './routes/media-kit.routes.js';
 import { proposalRoutes } from './routes/proposal.routes.js';
 import { paymentRoutes } from './routes/payment.routes.js';
 import { adminRoutes } from './routes/admin.routes.js';
+import { agencyRoutes } from './routes/agency.routes.js'
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use('/api/media-kit', mediaKitRoutes);
 app.use('/api/proposals', proposalRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/agency', agencyRoutes);
 
 // Rota de Healthcheck
 app.get('/health', (req: Request, res: Response) => {
