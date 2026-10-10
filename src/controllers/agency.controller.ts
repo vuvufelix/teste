@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { prisma } from '../config/prisma.js';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
+import { NotificationService } from '../services/notification.service.js';
 
 export class AgencyController {
   // 1. Agência envia um convite de delegação para o criador através do e-mail
@@ -75,6 +76,12 @@ export class AgencyController {
       },
     });
 
+    await NotificationService.sendPushToUser(creator.id, {
+        title: 'Novo Convite de Agência! 🚀',
+        body: `${agencyUser.name} convidou-o para gerir a sua conta.`,
+        url: '/dashboard/invites',
+    });
+
     return res.status(201).json({
       message: 'Convite enviado com sucesso ao criador!',
       delegation,
@@ -122,6 +129,12 @@ export class AgencyController {
     const updatedDelegation = await prisma.agencyDelegation.update({
       where: { id: delegationId },
       data: { status },
+    });
+
+    await NotificationService.sendPushToUser(delegation.agencyId, {
+        title: 'Convite Aceite! 🎉',
+        body: `${req.user.id} aceitou a sua solicitação de delegação.`,
+        url: '/agency/creators',
     });
 
     return res.status(200).json({

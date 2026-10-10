@@ -9,6 +9,7 @@ import { proposalRoutes } from './routes/proposal.routes.js';
 import { paymentRoutes } from './routes/payment.routes.js';
 import { adminRoutes } from './routes/admin.routes.js';
 import { agencyRoutes } from './routes/agency.routes.js'
+import { notificationRoutes } from './routes/notification.routes.js'
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use('/api/proposals', proposalRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/agency', agencyRoutes);
+app.use('/api/notifications', notificationRoutes)
 
 // Rota de Healthcheck
 app.get('/health', (req: Request, res: Response) => {

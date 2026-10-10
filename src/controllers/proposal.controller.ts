@@ -5,6 +5,7 @@ import { createProposalSchema, updateProposalStatusSchema } from '../schemas/pro
 import { PDFService } from '../services/pdf.service.js';
 import { AIService } from "../services/ai.service.js";
 import { MailService } from "../services/mail.service.js";
+import { NotificationService } from '../services/notification.service.js';
 
 export class ProposalController {
   // Criar Proposta Comercial (Com suporte a Agências e Delegação)
@@ -167,6 +168,12 @@ export class ProposalController {
       where: { id },
       data: { status: parseResult.data.status },
       include: { items: true },
+    });
+
+    await NotificationService.sendPushToUser(proposal.userId, {
+      title: 'Status de Proposta Atualizado! 📄',
+      body: `A proposta para "${proposal.brandName}" mudou para ${updatedProposal.status}.`,
+      url: `/proposals/${proposal.id}`,
     });
 
     return res.status(200).json({ proposal: updatedProposal });
