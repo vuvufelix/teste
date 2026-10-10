@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Populando o banco de dados com os Planos do SaaS...');
 
-  // 1. Plano Inicial (Basic)
+  // 1. Plano Inicial (Basic) - SEM IA
   await prisma.plan.upsert({
     where: { slug: 'basic' },
     update: {
@@ -14,9 +14,10 @@ async function main() {
       priceUSD: 12.00,
       priceAOA: 11000.00,
       priceBRL: 60.00,
-      maxSocialNetworks: 1, // Limite de 1 rede social
+      maxSocialNetworks: 1,
       maxProposalsPerMonth: 5,
       customDomainAllowed: false,
+      hasAIAssistant: false, // ❌ Sem acesso à IA
     },
     create: {
       name: 'Plano Inicial',
@@ -24,13 +25,14 @@ async function main() {
       priceUSD: 12.00,
       priceAOA: 11000.00,
       priceBRL: 60.00,
-      maxSocialNetworks: 1, // Permite apenas 1 rede social
+      maxSocialNetworks: 1,
       maxProposalsPerMonth: 5,
       customDomainAllowed: false,
+      hasAIAssistant: false,
     },
   });
 
-  // 2. Plano Profissional (Pro)
+  // 2. Plano Profissional (Pro) - COM IA
   await prisma.plan.upsert({
     where: { slug: 'pro' },
     update: {
@@ -38,9 +40,10 @@ async function main() {
       priceUSD: 30.00,
       priceAOA: 28000.00,
       priceBRL: 150.00,
-      maxSocialNetworks: 5, // Limite de até 5 redes sociais
-      maxProposalsPerMonth: -1, // Ilimitado
+      maxSocialNetworks: 5,
+      maxProposalsPerMonth: -1,
       customDomainAllowed: true,
+      hasAIAssistant: true, // ✅ Com acesso à IA
     },
     create: {
       name: 'Plano Profissional',
@@ -48,13 +51,14 @@ async function main() {
       priceUSD: 30.00,
       priceAOA: 28000.00,
       priceBRL: 150.00,
-      maxSocialNetworks: 5, // Até 5 redes sociais
-      maxProposalsPerMonth: -1, // Ilimitado
+      maxSocialNetworks: 5,
+      maxProposalsPerMonth: -1,
       customDomainAllowed: true,
+      hasAIAssistant: true,
     },
   });
 
-  // 3. Plano Agência (Agency)
+  // 3. Plano Agência (Agency) - COM IA
   await prisma.plan.upsert({
     where: { slug: 'agency' },
     update: {
@@ -62,9 +66,10 @@ async function main() {
       priceUSD: 80.00,
       priceAOA: 75000.00,
       priceBRL: 400.00,
-      maxSocialNetworks: -1, // Ilimitado (-1)
-      maxProposalsPerMonth: -1, // Ilimitado (-1)
+      maxSocialNetworks: -1,
+      maxProposalsPerMonth: -1,
       customDomainAllowed: true,
+      hasAIAssistant: true, // ✅ Com acesso à IA
     },
     create: {
       name: 'Plano Agência',
@@ -72,9 +77,10 @@ async function main() {
       priceUSD: 80.00,
       priceAOA: 75000.00,
       priceBRL: 400.00,
-      maxSocialNetworks: -1, // Redes sociais ilimitadas
-      maxProposalsPerMonth: -1, // Propostas ilimitadas
+      maxSocialNetworks: -1,
+      maxProposalsPerMonth: -1,
       customDomainAllowed: true,
+      hasAIAssistant: true,
     },
   });
 

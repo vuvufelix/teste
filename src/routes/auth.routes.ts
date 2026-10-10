@@ -11,5 +11,7 @@ authRoutes.post('/logout', ensureAuthenticated, AuthController.logout);
 authRoutes.get('/me', ensureAuthenticated, AuthController.me);
 authRoutes.post('/forgot-password', AuthController.forgotPassword);
 authRoutes.post('/reset-password', AuthController.resetPassword);
+// Exemplo nas rotas de autenticação/perfil
+authRoutes.delete('/account', ensureAuthenticated, AuthController.deleteAccount);
 
 export { authRoutes };

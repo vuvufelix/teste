@@ -312,4 +312,43 @@ export class AuthController {
       message: 'Senha redefinida com sucesso! Você já pode fazer login com sua nova senha.',
     });
   }
+
+  // 4. Deletar a conta permanentemente
+  static async deleteAccount(req: AuthenticatedRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
+
+    const { password } = req.body; // Exige confirmação da senha por segurança
+
+    if (!password) {
+      return res.status(400).json({ error: 'Informe a sua senha atual para confirmar a exclusão da conta.' });
+    }
+
+    try {
+      const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+      if (!user) {
+        return res.status(404).json({ error: 'Utilizador não encontrado.' });
+      }
+
+      // Valida a senha antes de apagar a conta permanentemente
+      const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+      if (!passwordMatch) {
+        return res.status(401).json({ error: 'Senha incorreta. A exclusão foi cancelada.' });
+      }
+
+      // Elimina o utilizador (o Prisma encarrega-se de apagar propostas/mídia kits em cascata se configurado)
+      await prisma.user.delete({ where: { id: req.user.id } });
+
+      // Limpa o cookie da sessão
+      res.clearCookie('refreshToken', {
+        httpOnly: true,
+        secure: env.NODE_ENV === 'production',
+        sameSite: 'strict',
+      });
+
+      return res.status(200).json({ message: 'Conta eliminada permanentemente com sucesso.' });
+    } catch (error) {
+      console.error('Erro ao deletar conta:', error);
+      return res.status(500).json({ error: 'Erro ao eliminar a conta.' });
+    }
+  }
 }

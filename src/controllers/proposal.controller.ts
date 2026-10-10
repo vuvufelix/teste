@@ -3,8 +3,8 @@ import { prisma } from '../config/prisma.js';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
 import { createProposalSchema, updateProposalStatusSchema } from '../schemas/proposal.schema.js';
 import { PDFService } from '../services/pdf.service.js';
-import { AIService } from "../services/ai.service.js"
-import { MailService } from "../services/mail.service.js"
+import { AIService } from "../services/ai.service.js";
+import { MailService } from "../services/mail.service.js";
 
 export class ProposalController {
   // Criar Proposta Comercial
@@ -21,13 +21,28 @@ export class ProposalController {
 
     const { brandName, brandEmail, title, description, currency, validUntil, items } = parseResult.data;
 
-    // Regra de Negócio: Limite de Propostas do Plano
+    // Busca os dados do utilizador, plano e status da assinatura
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
       include: { plan: true },
     });
 
-    if (user?.plan && user.plan.maxProposalsPerMonth !== -1) {
+    if (!user) return res.status(404).json({ error: 'Utilizador não encontrado.' });
+
+    const isSuperAdmin = user.role === 'SUPER_ADMIN';
+    const isTrialing = user.subscriptionStatus === 'TRIALING';
+    const isActive = user.subscriptionStatus === 'ACTIVE';
+
+    // 🔒 Verificação de Assinatura Inativa (Se não estiver ativa, nem em trial, nem for admin)
+    if (!isActive && !isTrialing && !isSuperAdmin) {
+      return res.status(403).json({
+        error: 'Sua assinatura está inativa ou expirou. Assine um plano para criar novas propostas.',
+        code: 'SUBSCRIPTION_INACTIVE',
+      });
+    }
+
+    // 📏 Regra de Negócio: Limite de Propostas do Plano (Ignorado se estiver em trial ou for super admin)
+    if (!isTrialing && !isSuperAdmin && user.plan && user.plan.maxProposalsPerMonth !== -1) {
       const now = new Date();
       const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -187,14 +202,11 @@ export class ProposalController {
     return res.status(200).json({ message: 'Proposta comercial excluída com sucesso.' });
   }
 
-  /**
-   * Gera e faz o download direto do PDF da Proposta Comercial
-   */
+  // Gera e faz o download direto do PDF da Proposta Comercial
   static async downloadProposalPDF(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
 
-      // 1. Busca a proposta no banco com os itens e o criador
       const proposal = await prisma.proposal.findUnique({
         where: { id },
         include: {
@@ -212,12 +224,10 @@ export class ProposalController {
         return res.status(404).json({ error: 'Proposta não encontrada.' });
       }
 
-      // Regra de segurança: garante que a proposta pertence ao usuário autenticado
       if (req.user && proposal.userId !== req.user.id && req.user.role !== 'SUPER_ADMIN') {
         return res.status(403).json({ error: 'Acesso negado a esta proposta.' });
       }
 
-      // 2. Prepara os dados formatados para o PDFService
       const pdfData = {
         id: proposal.id,
         title: proposal.title,
@@ -238,17 +248,13 @@ export class ProposalController {
         })),
       };
 
-      // 3. Gera o Buffer do PDF usando Puppeteer
       const pdfBuffer = await PDFService.generateProposalPDFBuffer(pdfData);
-
-      // 4. Configura as Headers do Express para o download no navegador
       const fileName = `Proposta_Influkit_${proposal.brandName.replace(/\s+/g, '_')}_${proposal.id.substring(0, 8)}.pdf`;
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
       res.setHeader('Content-Length', pdfBuffer.length);
 
-      // 5. Envia o Buffer binário direto para a resposta
       return res.end(pdfBuffer);
     } catch (error) {
       console.error('Erro ao gerar PDF da proposta:', error);
@@ -256,7 +262,7 @@ export class ProposalController {
     }
   }
 
-  // Gerar texto da proposta com IA (Gemini)
+  // Gerar texto da proposta com IA (Gemini) - Com validação de plano e suporte a Trial
   static async generateAIProposalText(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
 
@@ -265,13 +271,26 @@ export class ProposalController {
       return res.status(400).json({ error: 'Informe o nome da marca e o título da proposta.' });
     }
 
-    // Busca os dados do criador logado (nome e nicho do mídia kit)
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      include: { mediaKit: true },
+      include: { 
+        plan: true, 
+        mediaKit: true 
+      },
     });
 
     if (!user) return res.status(404).json({ error: 'Utilizador não encontrado.' });
+
+    const isSuperAdmin = user.role === 'SUPER_ADMIN';
+    const isTrialing = user.subscriptionStatus === 'TRIALING';
+
+    // 🔒 Regra de Negócio: Se não for admin, não estiver em trial e o plano não permitir IA, bloqueia!
+    if (!isSuperAdmin && !isTrialing && (!user.plan || !user.plan.hasAIAssistant)) {
+      return res.status(403).json({
+        error: 'A geração de propostas com Inteligência Artificial é exclusiva dos planos Pro e Agência. Faça um upgrade para desbloquear.',
+        code: 'AI_FEATURE_LOCKED',
+      });
+    }
 
     const creatorName = user.name || 'Criador de Conteúdo';
     const niche = user.mediaKit?.niche || 'Marketing Digital';
@@ -286,20 +305,18 @@ export class ProposalController {
 
       return res.status(200).json({ message: 'Texto gerado com sucesso!', aiMessage });
     } catch (error) {
+      console.error('Erro ao gerar texto com IA:', error);
       return res.status(500).json({ error: 'Erro ao gerar texto com Inteligência Artificial.' });
     }
   }
 
-  /**
-   * Envia a proposta comercial em PDF por e-mail para a marca
-   */
+  // Envia a proposta comercial em PDF por e-mail para a marca
   static async sendProposalEmail(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
     const { id } = req.params;
-    const { customMessage } = req.body; // Mensagem que o criador personalizou (ou gerou com IA)
+    const { customMessage } = req.body;
 
     try {
-      // 1. Busca a proposta com os dados necessários
       const proposal = await prisma.proposal.findFirst({
         where: { id, userId: req.user.id },
         include: {
@@ -316,7 +333,6 @@ export class ProposalController {
         return res.status(400).json({ error: 'Esta proposta não possui um e-mail de marca associado.' });
       }
 
-      // 2. Prepara os dados para gerar o PDF que vai em anexo
       const pdfData = {
         id: proposal.id,
         title: proposal.title,
@@ -337,20 +353,19 @@ export class ProposalController {
         })),
       };
 
-      // 3. Gera o Buffer do PDF da proposta
       const pdfBuffer = await PDFService.generateProposalPDFBuffer(pdfData);
 
-      // 4. Dispara o e-mail usando o MailService com o PDF em anexo
+      // Correção aplicada: Passando proposal.user.email (e-mail real) em vez do nome no creatorEmail
       await MailService.sendCustomProposalEmail({
         brandEmail: proposal.brandEmail,
         brandName: proposal.brandName,
         proposalTitle: proposal.title,
         creatorName: proposal.user.name || 'Criador de Conteúdo',
+        creatorEmail: proposal.user.email, 
         customMessage: customMessage || 'Segue em anexo a nossa proposta comercial detalhada.',
         pdfBuffer,
       });
 
-      // 5. Opcional: Atualiza o status da proposta para 'SENT' (Enviada)
       await prisma.proposal.update({
         where: { id },
         data: { status: 'SENT' },

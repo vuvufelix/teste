@@ -11,6 +11,13 @@ import { CloudinaryService } from '../services/cloudinary.service.js';
 import { FetchedSocialStats, SocialStatsService } from "../services/social-stats.service.js"
 
 export class MediaKitController {
+  // Helper privado para verificar se o utilizador tem acesso total (Trial, Active ou Super Admin)
+  private static hasFullAccess(user: { subscriptionStatus?: string | null; role?: string | null }) {
+    if (user.role === 'SUPER_ADMIN') return true;
+    if (user.subscriptionStatus === 'ACTIVE' || user.subscriptionStatus === 'TRIALING') return true;
+    return false;
+  }
+
   // Busca ou cria automaticamente o Mídia Kit do usuário logado
   static async getMyMediaKit(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
@@ -55,10 +62,14 @@ export class MediaKitController {
     });
 
     if (customDomain) {
+      // Durante o trial ou com plano ativo/admin, permite testar domínios personalizados
+      const hasAccess = userWithPlan ? MediaKitController.hasFullAccess(userWithPlan) : false;
       const isDomainAllowed = userWithPlan?.plan?.customDomainAllowed;
-      const isSubActive = userWithPlan?.subscriptionStatus === 'ACTIVE';
 
-      if (!isSubActive || !isDomainAllowed) {
+      // Se estiver em trial, permitimos testar. Caso contrário, validamos o plano.
+      const isInTrial = userWithPlan?.subscriptionStatus === 'TRIALING';
+
+      if (!isInTrial && (!hasAccess || !isDomainAllowed)) {
         return res.status(403).json({
           error: 'O seu plano atual não permite o uso de domínio personalizado. Faça upgrade para o plano Pro ou Agência.',
           code: 'CUSTOM_DOMAIN_NOT_ALLOWED',
@@ -179,19 +190,24 @@ export class MediaKitController {
       include: { plan: true },
     });
 
-    if (userWithPlan?.subscriptionStatus !== 'ACTIVE' && userWithPlan?.role !== 'SUPER_ADMIN') {
-      if (mediaKit.socialNetworks.length >= 1) {
-        return res.status(403).json({
-          error: 'Sua assinatura está inativa ou expirou. Assine um plano para adicionar mais redes sociais.',
-          code: 'SUBSCRIPTION_INACTIVE',
-        });
-      }
+    // 🔒 Verificação de Status da Assinatura (Bloqueia se inativa e NÃO estiver em trial)
+    const subscriptionStatus = userWithPlan?.subscriptionStatus;
+    const isSuperAdmin = userWithPlan?.role === 'SUPER_ADMIN';
+    const isTrialing = subscriptionStatus === 'TRIALING';
+    const isActive = subscriptionStatus === 'ACTIVE';
+
+    if (!isActive && !isTrialing && !isSuperAdmin) {
+      return res.status(403).json({
+        error: 'Sua assinatura está inativa ou expirou. Assine um plano para adicionar redes sociais.',
+        code: 'SUBSCRIPTION_INACTIVE',
+      });
     }
 
-    if (userWithPlan?.plan && userWithPlan.plan.maxSocialNetworks !== -1) {
+    // 📏 Verificação de Limites do Plano (Se NÃO estiver em trial e NÃO for Super Admin, aplica o limite do plano)
+    if (!isTrialing && !isSuperAdmin && userWithPlan?.plan && userWithPlan.plan.maxSocialNetworks !== -1) {
       if (mediaKit.socialNetworks.length >= userWithPlan.plan.maxSocialNetworks) {
         return res.status(403).json({
-          error: `Seu plano atual permite cadastrar no máximo ${userWithPlan.plan.maxSocialNetworks} rede(s) social(is).`,
+          error: `Seu plano atual permite cadastrar no máximo ${userWithPlan.plan.maxSocialNetworks} rede(s) social(is). Faça upgrade para adicionar mais.`,
           code: 'PLAN_LIMIT_REACHED',
         });
       }
@@ -321,7 +337,6 @@ export class MediaKitController {
       data: {
         followersCount: updatedStats.followersCount || socialNetwork.followersCount,
         engagementRate: updatedStats.engagementRate || socialNetwork.engagementRate,
-        // 👈 Corrigido usando '?? 0' e validando se é maior que zero com segurança
         monthlyViews: (updatedStats.monthlyViews ?? 0) > 0 ? updatedStats.monthlyViews : socialNetwork.monthlyViews,
         lastUpdated: new Date(),
       },

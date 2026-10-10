@@ -63,9 +63,6 @@ model User {
   proposals          Proposal[]
   paymentOrders      PaymentOrder[]
 
-  smtpEmail   String?
-  smtpPass    String? // Palavra-passe de aplicação do Gmail do próprio criador
-
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
@@ -82,6 +79,7 @@ model Plan {
   durationInDays       Int      @default(30) // <--- Adicionado (Ex: 30, 90, 365)
   maxSocialNetworks    Int      // -1 para ilimitado
   maxProposalsPerMonth Int      // -1 para ilimitado
+  hasAIAssistant        Boolean    @default(false) // 👈 Novo controlo de IA
   customDomainAllowed  Boolean  @default(false)
   
   users                User[]

@@ -156,6 +156,7 @@ export class MailService {
     brandName: string;
     proposalTitle: string;
     creatorName: string;
+    creatorEmail: string;
     customMessage: string;
     pdfBuffer: Buffer;
   }) {
@@ -164,6 +165,7 @@ export class MailService {
     const mailOptions = {
       from: `"${data.creatorName} via Influkit" <${process.env.SMTP_USER}>`,
       to: data.brandEmail,
+      replyTo: `"${data.creatorName}" <${data.creatorEmail}>`,
       subject: `Proposta Comercial: ${data.proposalTitle}`,
       html: `
         <!DOCTYPE html>
