@@ -13,11 +13,19 @@ export const updateMediaKitSchema = z.object({
 });
 
 export const addSocialNetworkSchema = z.object({
-  platform: z.enum(['INSTAGRAM', 'TIKTOK', 'YOUTUBE', 'TWITTER', 'LINKEDIN']),
-  username: z.string().min(1, 'O nome de usuário é obrigatório.'),
+  platform: z.enum(['INSTAGRAM', 'TIKTOK', 'YOUTUBE', 'FACEBOOK', 'TWITTER', 'LINKEDIN']),
+  username: z.string().min(1, 'O nome de usuário é obrigatório.').optional(),
   profileUrl: z.string().url('URL inválida.').optional().or(z.literal('')),
-  followersCount: z.number().int().nonnegative('O número de seguidores não pode ser negativo.'),
-  engagementRate: z.number().min(0).max(100, 'A taxa de engajamento deve estar entre 0 e 100.'),
+  
+  // Métricas automáticas opcionais
+  followersCount: z.number().int().nonnegative('O número de seguidores não pode ser negativo.').optional(),
+  engagementRate: z.number().min(0).max(100, 'A taxa de engajamento deve estar entre 0 e 100.').optional(),
+  
+  // 👈 Novos campos do Modelo Híbrido (Manuais)
+  monthlyViews: z.number().int().nonnegative('As visualizações não podem ser negativas.').optional().default(0),
+  targetAudience: z.string().max(255, 'O público-alvo deve ter no máximo 255 caracteres.').optional(),
+  pricePerPost: z.number().nonnegative('O preço não pode ser negativo.').optional().default(0),
+  
   avgImpressions: z.number().int().nonnegative().optional().default(0),
 });
 

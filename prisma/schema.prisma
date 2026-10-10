@@ -126,6 +126,8 @@ model SocialNetwork {
   lastUpdated     DateTime @default(now())
   avgImpressions Int      @default(0)
   lastSyncedAt   DateTime @default(now())
+  targetAudience  String?                      // Ex: "70% Feminino, 18-24 anos, Brasil"
+  pricePerPost    Float    @default(0.0)       // Valor base cobrado por post/reels (para propostas)
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

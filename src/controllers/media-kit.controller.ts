@@ -49,13 +49,11 @@ export class MediaKitController {
 
     const { slug, bio, niche, location, isPublic, customDomain } = parseResult.data as any;
 
-    // Buscar o usuário e o plano atual
     const userWithPlan = await prisma.user.findUnique({
       where: { id: req.user.id },
       include: { plan: true },
     });
 
-    // Validar se o usuário tentou definir/alterar um customDomain sem ter o plano permitido
     if (customDomain) {
       const isDomainAllowed = userWithPlan?.plan?.customDomainAllowed;
       const isSubActive = userWithPlan?.subscriptionStatus === 'ACTIVE';
@@ -68,7 +66,6 @@ export class MediaKitController {
       }
     }
 
-    // Verificar se o slug já está em uso por outro usuário
     const existingSlug = await prisma.mediaKit.findFirst({
       where: {
         slug,
@@ -142,7 +139,7 @@ export class MediaKitController {
     return res.status(200).json({ mediaKit });
   }
 
-  // Adicionar Rede Social ao Mídia Kit com busca automática de métricas
+  // Adicionar Rede Social ao Mídia Kit (Modelo Híbrido: Automático + Manual)
   static async addSocialNetwork(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
 
@@ -154,9 +151,17 @@ export class MediaKitController {
       });
     }
 
-    const { platform, profileUrl, handle: customHandle, followersCount: manualFollowers, engagementRate: manualEngagement } = parseResult.data as any;
+    const {
+      platform,
+      profileUrl,
+      username: customUsername,
+      followersCount: manualFollowers,
+      engagementRate: manualEngagement,
+      monthlyViews,
+      targetAudience,
+      pricePerPost,
+    } = parseResult.data as any;
 
-    // Obter ou criar o Mídia Kit do usuário
     let mediaKit = await prisma.mediaKit.findUnique({
       where: { userId: req.user.id },
       include: { socialNetworks: true },
@@ -169,13 +174,11 @@ export class MediaKitController {
       });
     }
 
-    // Obter o plano do usuário
     const userWithPlan = await prisma.user.findUnique({
       where: { id: req.user.id },
       include: { plan: true },
     });
 
-    // Regra 1: Assinatura Ativa
     if (userWithPlan?.subscriptionStatus !== 'ACTIVE' && userWithPlan?.role !== 'SUPER_ADMIN') {
       if (mediaKit.socialNetworks.length >= 1) {
         return res.status(403).json({
@@ -185,42 +188,48 @@ export class MediaKitController {
       }
     }
 
-    // Regra 2: Limite do Plano
     if (userWithPlan?.plan && userWithPlan.plan.maxSocialNetworks !== -1) {
       if (mediaKit.socialNetworks.length >= userWithPlan.plan.maxSocialNetworks) {
         return res.status(403).json({
-          error: `Seu plano atual permite cadastrar no máximo ${userWithPlan.plan.maxSocialNetworks} rede(s) social(is). Faça upgrade para adicionar mais.`,
+          error: `Seu plano atual permite cadastrar no máximo ${userWithPlan.plan.maxSocialNetworks} rede(s) social(is).`,
           code: 'PLAN_LIMIT_REACHED',
         });
       }
     }
 
-    // 🚀 BUSCA AUTOMÁTICA DAS MÉTRICAS SE O USUÁRIO NÃO INFORMAR MANUALMENTE
-    let autoStats: FetchedSocialStats = { followersCount: 0, engagementRate: 0, monthlyViews: 0, handle: customHandle || '' };
-    const handleValue = customHandle || autoStats.handle || '';
-    const cleanUsername = handleValue.replace('@', '');
-
-    if (!manualFollowers || manualFollowers === 0) {
-      autoStats = await SocialStatsService.fetchStats(platform, profileUrl || customHandle);
+    // 🚀 BUSCA AUTOMÁTICA DAS MÉTRICAS SE O SEGUIDOR NÃO FOI INFORMADO MANUALMENTE
+    let autoStats: FetchedSocialStats = { followersCount: 0, engagementRate: 0, monthlyViews: 0, handle: customUsername || '' };
+    
+    if ((!manualFollowers || manualFollowers === 0) && profileUrl) {
+      try {
+        autoStats = await SocialStatsService.fetchStats(platform, profileUrl);
+      } catch (err) {
+        console.warn('⚠️ Falha ao buscar estatísticas automáticas, prosseguindo com dados informados:', err);
+      }
     }
 
-    // Salva a rede social combinando dados informados com os obtidos automaticamente
+    const handleValue = customUsername || autoStats.handle || '';
+    const cleanUsername = handleValue.replace('@', '');
+
+    // Salva a rede social combinando Automático + Manual
     const newSocialNetwork = await prisma.socialNetwork.create({
       data: {
         mediaKitId: mediaKit.id,
         platform,
-        profileUrl,
-        handle: customHandle || autoStats.handle,
+        profileUrl: profileUrl || '',
+        handle: handleValue.startsWith('@') ? handleValue : `@${handleValue}`,
         username: cleanUsername,
-        followersCount: manualFollowers || autoStats.followersCount,
-        engagementRate: manualEngagement || autoStats.engagementRate,
-        monthlyViews: autoStats.monthlyViews || 0,
+        followersCount: manualFollowers ?? autoStats.followersCount,
+        engagementRate: manualEngagement ?? autoStats.engagementRate,
+        monthlyViews: monthlyViews ?? autoStats.monthlyViews ?? 0,
+        targetAudience: targetAudience || null,
+        pricePerPost: pricePerPost ?? 0.0,
         lastUpdated: new Date(),
       },
     });
 
     return res.status(201).json({
-      message: 'Rede social adicionada e métricas atualizadas com sucesso.',
+      message: 'Rede social adicionada com sucesso (Modelo Híbrido).',
       socialNetwork: newSocialNetwork,
     });
   }
@@ -279,7 +288,6 @@ export class MediaKitController {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
     const { id } = req.params;
 
-    // 1. Busca a rede social garantindo que pertence ao usuário logado
     const socialNetwork = await prisma.socialNetwork.findUnique({
       where: { id },
       include: { mediaKit: true },
@@ -289,7 +297,6 @@ export class MediaKitController {
       return res.status(404).json({ error: 'Rede social não encontrada ou sem permissão.' });
     }
 
-    // 2. Trava de Segurança de Cache: 24 Horas
     const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
     const now = new Date().getTime();
     const lastUpdated = socialNetwork.lastUpdated ? new Date(socialNetwork.lastUpdated).getTime() : 0;
@@ -302,22 +309,20 @@ export class MediaKitController {
       });
     }
 
-    // 3. Fallback seguro para garantir tipo 'string'
     const targetUrlOrHandle = socialNetwork.profileUrl || socialNetwork.handle || '';
 
-    // 4. Chama o serviço externo apenas se passou o prazo de 24h
     const updatedStats = await SocialStatsService.fetchStats(
       socialNetwork.platform,
       targetUrlOrHandle
     );
 
-    // 5. Atualiza os dados persistidos no banco
     const updatedSocialNetwork = await prisma.socialNetwork.update({
       where: { id },
       data: {
         followersCount: updatedStats.followersCount || socialNetwork.followersCount,
         engagementRate: updatedStats.engagementRate || socialNetwork.engagementRate,
-        monthlyViews: updatedStats.monthlyViews ?? socialNetwork.monthlyViews,
+        // 👈 Corrigido usando '?? 0' e validando se é maior que zero com segurança
+        monthlyViews: (updatedStats.monthlyViews ?? 0) > 0 ? updatedStats.monthlyViews : socialNetwork.monthlyViews,
         lastUpdated: new Date(),
       },
     });

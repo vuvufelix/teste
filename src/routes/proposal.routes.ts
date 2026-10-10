@@ -11,8 +11,8 @@ proposalRoutes.post('/', ProposalController.createProposal);
 proposalRoutes.get('/', ProposalController.getMyProposals);
 proposalRoutes.get('/:id', ProposalController.getProposalById);
 proposalRoutes.patch('/:id/status', ProposalController.updateStatus);
-proposalRoutes.get('/:id/pdf', ProposalController.renderProposalPDF);
+proposalRoutes.get('/:id/pdf/html', ProposalController.renderProposalPDF);
 proposalRoutes.delete('/:id', ProposalController.deleteProposal);
-proposalRoutes.get('/:id/pdf', ProposalController.downloadProposalPDF);
+proposalRoutes.get('/:id/pdf/download', ProposalController.downloadProposalPDF);
 
 export { proposalRoutes };
