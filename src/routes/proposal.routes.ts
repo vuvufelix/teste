@@ -14,5 +14,7 @@ proposalRoutes.patch('/:id/status', ProposalController.updateStatus);
 proposalRoutes.get('/:id/pdf/html', ProposalController.renderProposalPDF);
 proposalRoutes.delete('/:id', ProposalController.deleteProposal);
 proposalRoutes.get('/:id/pdf/download', ProposalController.downloadProposalPDF);
+proposalRoutes.post('/ai/generate-text', ProposalController.generateAIProposalText);
+proposalRoutes.post('/:id/send-email', ProposalController.sendProposalEmail);
 
 export { proposalRoutes };

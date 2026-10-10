@@ -50,6 +50,12 @@ export class AuthController {
       },
     });
 
+    try {
+      await MailService.sendWelcomeEmail(user.email, user.name);
+    } catch (error) {
+      console.error('Erro ao enviar e-mail de boas-vindas:', error);
+    }
+
     const accessToken = generateAccessToken({ userId: user.id, role: user.role });
     const refreshToken = generateRefreshToken({ userId: user.id, role: user.role });
 
