@@ -7,7 +7,7 @@ export const reviewPaymentSchema = z.object({
 
 export const updateUserPlanSchema = z.object({
   planSlug: z.enum(['basic', 'pro', 'agency']),
-  subscriptionStatus: z.enum(['ACTIVE', 'CANCELLED', 'TRIAL', 'EXPIRED']),
+  subscriptionStatus: z.enum(['ACTIVE', 'CANCELLED', 'TRIALING', 'EXPIRED', 'INACTIVE']),
 });
 
 export type ReviewPaymentDTO = z.infer<typeof reviewPaymentSchema>;

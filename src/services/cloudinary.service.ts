@@ -15,14 +15,24 @@ export class CloudinaryService {
     }
 
     try {
-      const uploadResponse = await cloudinary.uploader.upload(fileBase64, {
+      // Deteta se o base64 corresponde a um PDF (ex: data:application/pdf;base64 ou assinatura binária JVBERi0)
+      const isPdf = fileBase64.includes('application/pdf') || fileBase64.startsWith('JVBERi0');
+
+      const uploadOptions: any = {
         folder: `saas_mediakit/${folder}`,
-        transformation: [{ quality: 'auto', fetch_format: 'auto' }],
-      });
+        resource_type: isPdf ? 'raw' : 'image', // PDFs usam resource_type 'raw' para evitar corrupção
+      };
+
+      // Apenas aplica transformações de otimização se for estritamente uma imagem
+      if (!isPdf) {
+        uploadOptions.transformation = [{ quality: 'auto', fetch_format: 'auto' }];
+      }
+
+      const uploadResponse = await cloudinary.uploader.upload(fileBase64, uploadOptions);
       return uploadResponse.secure_url;
     } catch (error) {
       console.error('Erro no upload Cloudinary:', error);
-      throw new Error('Falha ao realizar upload da imagem.');
+      throw new Error('Falha ao realizar upload do ficheiro.');
     }
   }
 }
