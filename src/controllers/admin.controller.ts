@@ -3,6 +3,7 @@ import { PaymentOrder, SubscriptionStatus } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
 import { reviewPaymentSchema, updateUserPlanSchema } from '../schemas/admin.schema.js';
+import { NotificationService } from '../services/notification.service.js';
 
 export class AdminController {
   // Retorna métricas globais do SaaS (MRR, Receita, Assinantes)
@@ -113,6 +114,11 @@ export class AdminController {
         }),
       ]);
 
+      await NotificationService.sendPushToUser(order.userId, {
+        title: 'Status do pagamento (Influkit)! 🚀',
+        body: `Pagamento aprovado com sucesso! O seu plano foi ativado.`
+      });
+
       return res.status(200).json({
         message: 'Pagamento aprovado com sucesso! O plano do usuário foi ativado.',
       });
@@ -123,6 +129,11 @@ export class AdminController {
           status: 'REJECTED',
           rejectionReason: rejectionReason || 'Comprovativo de pagamento inválido ou não identificado.',
         },
+      });
+
+      await NotificationService.sendPushToUser(order.userId, {
+        title: 'Status do pagamento (Influkit)!',
+        body: rejectionReason || 'Comprovativo de pagamento inválido ou não identificado.'
       });
 
       return res.status(200).json({

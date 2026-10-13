@@ -5,6 +5,7 @@ import { createStripeCheckoutSchema, createManualAOAPaymentSchema } from '../sch
 import { CloudinaryService } from '../services/cloudinary.service.js';
 import { StripeService, stripe } from '../services/stripe.service.js';
 import { env } from '../config/env.js';
+import { NotificationService } from '../services/notification.service.js';
 
 /**
  * Calcula a data de expiração com base nos dias definidos no plano.
@@ -168,6 +169,11 @@ export class PaymentController {
         },
       }),
     ]);
+
+    await NotificationService.sendPushToUser(order.userId, {
+      title: 'Status do pagamento (Influkit)! 🚀',
+      body: `Pagamento aprovado e assinatura ativada por ${durationDays} dias com sucesso.`
+    });
 
     return res.status(200).json({
       message: `Pagamento aprovado e assinatura ativada por ${durationDays} dias com sucesso.`,

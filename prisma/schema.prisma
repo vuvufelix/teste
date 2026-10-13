@@ -210,9 +210,9 @@ model PaymentOrder {
 model AgencyDelegation {
   id         String   @id @default(uuid())
   agencyId   String
-  agency     User     @relation("AgencyToCreators", fields: [agencyId], references: [id])
+  agency     User     @relation("AgencyToCreators", fields: [agencyId], references: [id], onDelete: Cascade)
   creatorId  String
-  creator    User     @relation("CreatorToAgencies", fields: [creatorId], references: [id])
+  creator    User     @relation("CreatorToAgencies", fields: [creatorId], references: [id], onDelete: Cascade)
   status     String   @default("PENDING") // PENDING, ACCEPTED, REVOKED
   createdAt  DateTime @default(now())
 
