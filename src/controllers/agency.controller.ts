@@ -77,9 +77,9 @@ export class AgencyController {
     });
 
     await NotificationService.sendPushToUser(creator.id, {
-        title: 'Novo Convite de Agência! 🚀',
-        body: `${agencyUser.name} convidou-o para gerir a sua conta.`,
-        url: '/dashboard/invites',
+      title: 'Novo Convite de Agência! 🚀',
+      body: `${agencyUser.name} convidou-o para gerir a sua conta.`,
+      url: '/dashboard/invites',
     });
 
     return res.status(201).json({

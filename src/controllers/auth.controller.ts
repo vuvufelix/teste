@@ -14,7 +14,6 @@ import { forgotPasswordSchema, resetPasswordSchema } from '../schemas/auth.schem
 import crypto from 'crypto';
 import { MailService } from '../services/mail.service.js';
 
-
 export class AuthController {
   static async register(req: Request, res: Response) {
     const parseResult = registerSchema.safeParse(req.body);
