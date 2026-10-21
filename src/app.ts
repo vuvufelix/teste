@@ -21,7 +21,7 @@ app.use(helmet());
 //   })
 // );
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001'], // Permite ambas as portas
+  origin: [env.FRONTEND_URL, 'http://localhost:3000'], // Permite ambas as portas
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']

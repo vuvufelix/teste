@@ -36,7 +36,7 @@ export class StripeService {
         planId,
       },
       success_url: `${env.FRONTEND_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${env.FRONTEND_URL}/pricing?canceled=true`,
+      cancel_url: `${env.FRONTEND_URL}/payment/cancel`,
     });
 
     return session;
