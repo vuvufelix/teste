@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { prisma } from '../config/prisma.js';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
 import { NotificationService } from '../services/notification.service.js';
+import { CloudinaryService } from '../services/cloudinary.service.js';
 
 export class AgencyController {
   // 1. Agência envia um convite de delegação para o criador através do e-mail
@@ -375,48 +376,46 @@ export class AgencyController {
     return res.status(200).json({ agency });
   }
 
-  // 10. Agência atualiza o seu próprio perfil, biografia e foto de perfil (armazenada no MediaKit da agência)
+  // 10. Agência atualiza o seu próprio perfil, biografia e foto de perfil
   static async updateAgencyProfile(req: AuthenticatedRequest, res: Response) {
     if (!req.user || req.user.role !== 'AGENCY') {
       return res.status(403).json({ error: 'Acesso negado.' });
     }
 
-    const { name, bio, profilePicture } = req.body;
+    const { bio, profilePicture } = req.body;
 
-    // Atualiza o nome na tabela User se fornecido
-    if (name) {
-      await prisma.user.update({
-        where: { id: req.user.id },
-        data: { name },
-      });
+    let imageUrl = profilePicture;
+
+    // 🎯 Solução: Se a foto vier em Base64, fazemos o upload para o Cloudinary primeiro!
+    if (profilePicture && profilePicture.startsWith('data:image')) {
+      imageUrl = await CloudinaryService.uploadImage(profilePicture, 'profile');
     }
 
-    // Upsert no MediaKit da agência para guardar/atualizar bio e profilePicture
+    // Upsert no MediaKit da agência guardando o URL seguro do Cloudinary
     const mediaKit = await prisma.mediaKit.upsert({
       where: { userId: req.user.id },
       update: {
         ...(bio !== undefined ? { bio } : {}),
-        ...(profilePicture !== undefined ? { profilePicture } : {}),
+        ...(imageUrl !== undefined ? { profilePicture: imageUrl } : {}),
       },
       create: {
         userId: req.user.id,
         slug: `agency-${req.user.id.slice(0, 8)}`,
         bio: bio || null,
-        profilePicture: profilePicture || null,
+        profilePicture: imageUrl || null,
         isPublic: false,
       },
     });
 
     const updatedUser = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { id: true, name: true, email: true },
+      select: { id: true, email: true },
     });
 
     return res.status(200).json({
       message: 'Perfil da agência atualizado com sucesso!',
       agency: {
         id: updatedUser?.id,
-        name: updatedUser?.name,
         email: updatedUser?.email,
         bio: mediaKit.bio,
         profilePicture: mediaKit.profilePicture,
