@@ -134,7 +134,7 @@ export class ProposalController {
 
     const totalAmount = processedItems.reduce((acc, item) => acc + item.totalPrice, 0);
 
-    // 🚀 Geração automática do Snapshot de Métricas reais do Criador (Sem inventar dados)
+    // Geração rigorosa do Snapshot de Métricas reais do Criador (Sem inventar dados)
     let metricsSnapshot = null;
     if (user.mediaKit && user.mediaKit.socialNetworks.length > 0) {
       const totalFollowers = user.mediaKit.socialNetworks.reduce((acc, net) => acc + (net.followersCount || 0), 0);
@@ -145,6 +145,7 @@ export class ProposalController {
         totalFollowers: totalFollowers > 0 ? totalFollowers.toLocaleString('pt-PT') : undefined,
         avgViews: totalViews > 0 ? totalViews.toLocaleString('pt-PT') : undefined,
         engagementRate: avgEngagement > 0 ? `${avgEngagement.toFixed(1)}%` : undefined,
+        networksCount: user.mediaKit.socialNetworks.length,
       };
     }
 
