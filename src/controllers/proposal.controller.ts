@@ -29,24 +29,36 @@ export class ProposalController {
     return false;
   }
 
-  // 📋 Obter IDs permitidos para listagem (Próprio utilizador + Criadores delegados se for agência)
-  private static async getAllowedUserIds(user: { id: string; role: string }): Promise<string[]> {
+  // 📋 Obter IDs permitidos para listagem com suporte a filtro opcional por criador
+  private static async getAllowedUserIds(user: { id: string; role: string }, queryParams?: { creatorId?: string }): Promise<string[]> {
     if (user.role === 'SUPER_ADMIN') {
       return [user.id];
     }
 
     if (user.role === 'AGENCY') {
-      const delegations = await prisma.agencyDelegation.findMany({
-        where: { agencyId: user.id, status: 'ACCEPTED' },
-        select: { creatorId: true },
-      });
-      return [user.id, ...delegations.map((d) => d.creatorId)];
+      // Se a agência passou um criador específico na query, validamos a delegação
+      if (queryParams?.creatorId) {
+        const delegation = await prisma.agencyDelegation.findUnique({
+          where: {
+            agencyId_creatorId: {
+              agencyId: user.id,
+              creatorId: queryParams.creatorId,
+            },
+          },
+        });
+        if (delegation && delegation.status === 'ACCEPTED') {
+          return [queryParams.creatorId];
+        }
+      }
+
+      // Por defeito, a agência vê APENAS as suas próprias propostas no painel principal
+      return [user.id];
     }
 
     return [user.id];
   }
 
-  // Criar Proposta Comercial (Com suporte a Agências, Delegação e Snapshot de Métricas)
+  // Criar Proposta Comercial (Com suporte a Agências, Delegação e Snapshot de Métricas Contextualizadas)
   static async createProposal(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
 
@@ -134,18 +146,29 @@ export class ProposalController {
 
     const totalAmount = processedItems.reduce((acc, item) => acc + item.totalPrice, 0);
 
-    // Geração rigorosa do Snapshot de Métricas reais do Criador (Sem inventar dados)
+    // 🚀 Snapshot Rígido e Contextualizado das Métricas
     let metricsSnapshot = null;
     if (user.mediaKit && user.mediaKit.socialNetworks.length > 0) {
-      const totalFollowers = user.mediaKit.socialNetworks.reduce((acc, net) => acc + (net.followersCount || 0), 0);
-      const totalViews = user.mediaKit.socialNetworks.reduce((acc, net) => acc + (net.monthlyViews || 0), 0);
-      const avgEngagement = user.mediaKit.socialNetworks.reduce((acc, net) => acc + (net.engagementRate || 0), 0) / user.mediaKit.socialNetworks.length;
+      const networks = user.mediaKit.socialNetworks;
+      const totalFollowers = networks.reduce((acc, net) => acc + (net.followersCount || 0), 0);
+      const totalViews = networks.reduce((acc, net) => acc + (net.monthlyViews || 0), 0);
+      const avgEngagement = networks.reduce((acc, net) => acc + (net.engagementRate || 0), 0) / networks.length;
+
+      // Verifica se existe alguma rede com dados de sincronização por API
+      const hasVerifiedApiData = networks.some((net) => (net as any).lastUpdated !== null && (net as any).lastUpdated !== undefined);
 
       metricsSnapshot = {
         totalFollowers: totalFollowers > 0 ? totalFollowers.toLocaleString('pt-PT') : undefined,
         avgViews: totalViews > 0 ? totalViews.toLocaleString('pt-PT') : undefined,
         engagementRate: avgEngagement > 0 ? `${avgEngagement.toFixed(1)}%` : undefined,
-        networksCount: user.mediaKit.socialNetworks.length,
+        networksCount: networks.length,
+        isVerified: hasVerifiedApiData,
+        analysisPeriod: 'Últimos 30 dias',
+        networksList: networks.map((net) => ({
+          platform: net.platform,
+          handle: net.handle || undefined,
+          followers: net.followersCount || 0,
+        })),
       };
     }
 
@@ -173,15 +196,18 @@ export class ProposalController {
     return res.status(201).json({ proposal });
   }
 
-  // Listar todas as propostas do usuário (e criadores delegados se for agência)
+  // Listar todas as propostas com base nas permissões e filtros
   static async getMyProposals(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
 
-    const allowedUserIds = await ProposalController.getAllowedUserIds(req.user);
+    const allowedUserIds = await ProposalController.getAllowedUserIds(req.user, req.query as { creatorId?: string });
 
     const proposals = await prisma.proposal.findMany({
       where: { userId: { in: allowedUserIds } },
-      include: { items: true },
+      include: { 
+        items: true,
+        user: { select: { name: true, email: true } } // Útil para identificar o autor caso necessário
+      },
       orderBy: { createdAt: 'desc' },
     });
 

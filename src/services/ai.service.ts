@@ -13,23 +13,29 @@ export class AIService {
   }): Promise<string> {
     try {
       const senderDescription = data.isAgency
-        ? `uma agência de gestão de talentos chamada ${data.creatorName}${data.talentName ? ` (representando o criador ${data.talentName})` : ''}`
-        : `um criador de conteúdos chamado ${data.creatorName}`;
+        ? `da agência ${data.creatorName}${data.talentName ? ` (representando o criador ${data.talentName})` : ''}`
+        : `o criador de conteúdos ${data.creatorName}`;
 
       const prompt = `
-        Escreve uma mensagem comercial profissional, prudente, elegante e persuasiva em tom B2B para enviar por e-mail a uma marca.
+        Escreve uma mensagem de e-mail comercial extremamente direta, profissional, personalizada e elegante para apresentar uma proposta a uma marca.
+
         Contexto:
         - Remetente: ${senderDescription}
-        - Nicho de Atuação: ${data.niche}
+        - Nicho: ${data.niche}
         - Destinatário (Marca): ${data.brandName}
-        - Assunto da Proposta: ${data.proposalTitle}
+        - Objetivo/Título: ${data.proposalTitle}
 
-        Diretrizes Estritas de Credibilidade:
-        - NUNCA uses superlatives absolutos não verificados (como "estou entre as maiores taxas de engajamento do nicho" ou "o público consome cegamente").
-        - Foca a mensagem na sinergia alinhada entre os objetivos de comunicação da marca e o valor de uma comunidade segmentada e ativa.
-        - Sê conciso (máximo de 3 parágrafos curtos), direto ao ponto e focado no valor profissional oferecido.
-        - Termina convidando a equipa a analisar os dados verificáveis e entregáveis apresentados no documento PDF em anexo.
-        - Não incluas formatação markdown com asteriscos pesados, usa texto limpo e direto.
+        Instruções de Estrutura (Siga este padrão curto):
+        1. Cumprimento direto à equipa de marketing da ${data.brandName}.
+        2. Apresentação breve de quem fala e do nicho de atuação.
+        3. Exposição clara do valor: como o conteúdo vai destacar a marca de forma prática e alinhada aos seus objetivos.
+        4. Chamada para ação simples: aviso de que a proposta comercial com métricas e valores está em anexo e convite para uma breve conversa.
+        5. Despedida profissional com contacto e link de perfil.
+
+        Regras Estritas:
+        - NUNCA use marcadores de texto Markdown com asteriscos (como **texto**). Devolva texto simples.
+        - Não use superlativos nem invente dados não comprovados.
+        - Mantenha o texto ultra objetivo e curto (menos de 150 palavras).
       `;
 
       const response = await ai.models.generateContent({

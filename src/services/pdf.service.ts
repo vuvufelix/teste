@@ -24,6 +24,9 @@ export interface ProposalPDFData {
     avgViews?: number | string;
     engagementRate?: string;
     networksCount?: number;
+    isVerified?: boolean;
+    analysisPeriod?: string;
+    networksList?: Array<{ platform: string; handle?: string; followers: number }>;
   } | null;
   items: Array<{ deliverable: string; quantity: number; unitPrice: number; totalPrice: number }>;
 }
@@ -48,13 +51,12 @@ export class PDFService {
     }
   }
 
-  // Remove caracteres indesejados de markdown (como ** ou #) para evitar que apareçam no PDF
   private static cleanMarkdown(text?: string | null): string {
     if (!text) return '';
     return text
-      .replace(/\*\*(.*?)\*\*/g, '$1') // Remove negrito **texto**
-      .replace(/\*(.*?)\*/g, '$1')     // Remove itálico *texto*
-      .replace(/#{1,6}\s?/g, '');      // Remove cabeçalhos markdown
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/#{1,6}\s?/g, '');
   }
 
   static generateProposalHTML(proposal: ProposalPDFData): string {
@@ -78,27 +80,33 @@ export class PDFService {
       </tr>
     `).join('');
 
+    const isVerified = proposal.metricsSnapshot?.isVerified ?? true;
+    const periodText = proposal.metricsSnapshot?.analysisPeriod || 'Últimos 30 dias';
+
     const metricsHtml = proposal.metricsSnapshot ? `
-      <div class="section-title">📊 Porquê Trabalhar Connosco? (Métricas Verificadas)</div>
+      <div class="section-title">📊 Desempenho das Redes Sociais (${isVerified ? 'Métricas Verificadas por API' : 'Métricas Declaradas'})</div>
       <div class="metrics-grid">
         ${proposal.metricsSnapshot.totalFollowers ? `
           <div class="metric-card">
             <div class="metric-value">${proposal.metricsSnapshot.totalFollowers}</div>
-            <div class="metric-label">Seguidores Totais ${proposal.metricsSnapshot.networksCount ? `(${proposal.metricsSnapshot.networksCount} redes)` : ''}</div>
+            <div class="metric-label">Seguidores Acumulados ${proposal.metricsSnapshot.networksCount ? `(${proposal.metricsSnapshot.networksCount} redes)` : ''}</div>
           </div>
         ` : ''}
         ${proposal.metricsSnapshot.avgViews ? `
           <div class="metric-card">
             <div class="metric-value">${proposal.metricsSnapshot.avgViews}</div>
-            <div class="metric-label">Visualizações Médias</div>
+            <div class="metric-label">Visualizações Médias por Vídeo/Post</div>
           </div>
         ` : ''}
         ${proposal.metricsSnapshot.engagementRate ? `
           <div class="metric-card">
             <div class="metric-value">${proposal.metricsSnapshot.engagementRate}</div>
-            <div class="metric-label">Taxa de Envolvimento Média</div>
+            <div class="metric-label">Taxa Média de Envolvimento</div>
           </div>
         ` : ''}
+      </div>
+      <div class="metrics-footnote">
+        * Período analisado: ${periodText}. Métricas somadas entre plataformas ativas do criador.
       </div>
     ` : '';
 
@@ -109,71 +117,72 @@ export class PDFService {
         <meta charset="UTF-8">
         <title>Proposta Comercial - ${proposal.title}</title>
         <style>
-          @page { size: A4; margin: 15mm; }
+          @page { size: A4; margin: 10mm 12mm; }
           * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            color: #0F172A; margin: 0; padding: 0; background-color: #FFFFFF; font-size: 12px; line-height: 1.45;
+            color: #0F172A; margin: 0; padding: 0; background-color: #FFFFFF; font-size: 11px; line-height: 1.4;
           }
-          .header-bar { height: 6px; background: linear-gradient(90deg, #6366F1 0%, #8B5CF6 50%, #EC4899 100%); border-radius: 4px; margin-bottom: 16px; }
-          .brand-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 14px; margin-bottom: 16px; page-break-inside: avoid; }
-          .creator-profile { display: flex; align-items: center; gap: 12px; }
-          .creator-avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid #6366F1; }
-          .creator-info h2 { margin: 0; font-size: 15px; font-weight: 800; color: #0F172A; }
-          .creator-info p { margin: 2px 0 0; font-size: 11px; color: #64748B; }
+          .header-bar { height: 4px; background: linear-gradient(90deg, #6366F1 0%, #8B5CF6 50%, #EC4899 100%); border-radius: 4px; margin-bottom: 12px; }
+          .brand-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 10px; margin-bottom: 12px; page-break-inside: avoid; }
+          .creator-profile { display: flex; align-items: center; gap: 10px; }
+          .creator-avatar { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 2px solid #6366F1; }
+          .creator-info h2 { margin: 0; font-size: 14px; font-weight: 800; color: #0F172A; }
+          .creator-info p { margin: 1px 0 0; font-size: 10px; color: #64748B; }
           .proposal-meta { text-align: right; }
-          .proposal-badge { display: inline-block; background: #EEF2FF; color: #4F46E5; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 20px; margin-bottom: 4px; letter-spacing: 0.5px; }
-          .meta-date { font-size: 10.5px; color: #64748B; margin: 1px 0; }
+          .proposal-badge { display: inline-block; background: #EEF2FF; color: #4F46E5; font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 12px; margin-bottom: 3px; letter-spacing: 0.5px; }
+          .meta-date { font-size: 9.5px; color: #64748B; margin: 1px 0; }
           .valid-until { color: #E11D48; font-weight: 600; }
-          .doc-title { font-size: 18px; font-weight: 800; color: #0F172A; margin: 0 0 12px 0; letter-spacing: -0.5px; page-break-inside: avoid; }
+          .doc-title { font-size: 16px; font-weight: 800; color: #0F172A; margin: 0 0 10px 0; letter-spacing: -0.3px; page-break-inside: avoid; }
           
           /* DESCRIÇÃO / VISÃO ESTRATÉGICA */
-          .description-box { background: #F8FAFC; border-left: 3px solid #6366F1; padding: 10px 12px; border-radius: 0 6px 6px 0; margin-bottom: 16px; font-size: 11px; color: #334155; line-height: 1.5; white-space: pre-line; page-break-inside: avoid; }
+          .description-box { background: #F8FAFC; border-left: 3px solid #6366F1; padding: 8px 10px; border-radius: 0 5px 5px 0; margin-bottom: 12px; font-size: 10.5px; color: #334155; line-height: 1.45; white-space: pre-line; page-break-inside: avoid; }
           
           /* METRICS GRID */
-          .section-title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: #4F46E5; letter-spacing: 0.8px; margin: 16px 0 8px; page-break-after: avoid; }
-          .metrics-grid { display: flex; gap: 8px; margin-bottom: 16px; page-break-inside: avoid; }
-          .metric-card { flex: 1; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 8px 10px; text-align: center; }
-          .metric-value { font-size: 14px; font-weight: 800; color: #0F172A; }
-          .metric-label { font-size: 9.5px; color: #64748B; font-weight: 500; margin-top: 1px; }
+          .section-title { font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: #4F46E5; letter-spacing: 0.6px; margin: 12px 0 6px; page-break-after: avoid; }
+          .metrics-grid { display: flex; gap: 6px; margin-bottom: 4px; page-break-inside: avoid; }
+          .metric-card { flex: 1; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 5px; padding: 6px 8px; text-align: center; }
+          .metric-value { font-size: 13px; font-weight: 800; color: #0F172A; }
+          .metric-label { font-size: 9px; color: #64748B; font-weight: 500; margin-top: 1px; }
+          .metrics-footnote { font-size: 8.5px; color: #94A3B8; margin-bottom: 12px; font-style: italic; }
 
           /* CARDS CLIENTE / CRIADOR */
-          .party-grid { display: table; width: 100%; margin-bottom: 16px; page-break-inside: avoid; }
+          .party-grid { display: table; width: 100%; margin-bottom: 12px; page-break-inside: avoid; }
           .party-col { display: table-cell; width: 50%; vertical-align: top; }
-          .party-col:first-child { padding-right: 8px; }
-          .party-col:last-child { padding-left: 8px; }
-          .party-card { background: #F8FAFC; border-radius: 6px; padding: 10px 12px; border: 1px solid #E2E8F0; }
-          .party-label { font-size: 9.5px; font-weight: 700; text-transform: uppercase; color: #6366F1; letter-spacing: 0.8px; margin-bottom: 3px; }
-          .party-name { font-size: 12px; font-weight: 700; color: #0F172A; margin: 0 0 2px 0; }
-          .party-detail { font-size: 10.5px; color: #475569; margin: 1px 0; }
+          .party-col:first-child { padding-right: 6px; }
+          .party-col:last-child { padding-left: 6px; }
+          .party-card { background: #F8FAFC; border-radius: 5px; padding: 8px 10px; border: 1px solid #E2E8F0; }
+          .party-label { font-size: 8.5px; font-weight: 700; text-transform: uppercase; color: #6366F1; letter-spacing: 0.8px; margin-bottom: 2px; }
+          .party-name { font-size: 11px; font-weight: 700; color: #0F172A; margin: 0 0 1px 0; }
+          .party-detail { font-size: 9.5px; color: #475569; margin: 1px 0; }
 
           /* TABELA */
-          table.items-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; page-break-inside: auto; }
+          table.items-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; page-break-inside: auto; }
           table.items-table tr { page-break-inside: avoid; }
-          table.items-table th { background: #F8FAFC; color: #475569; font-size: 10.5px; font-weight: 700; text-transform: uppercase; padding: 7px 10px; border-bottom: 2px solid #E2E8F0; text-align: left; }
-          table.items-table td { padding: 8px 10px; border-bottom: 1px solid #F1F5F9; color: #334155; font-size: 11px; }
-          .deliverable-cell { width: 45%; }
+          table.items-table th { background: #F8FAFC; color: #475569; font-size: 9.5px; font-weight: 700; text-transform: uppercase; padding: 5px 8px; border-bottom: 2px solid #E2E8F0; text-align: left; }
+          table.items-table td { padding: 6px 8px; border-bottom: 1px solid #F1F5F9; color: #334155; font-size: 10px; }
+          .deliverable-cell { width: 50%; }
           .item-title { font-weight: 600; color: #0F172A; }
           .center-cell { text-align: center; }
           .right-cell { text-align: right; }
           .bold-cell { font-weight: 700; color: #0F172A; }
 
-          /* CONDIÇÕES COMERCIAIS */
-          .conditions-box { background: #F1F5F9; border-radius: 6px; padding: 10px 12px; margin-bottom: 16px; font-size: 11px; border: 1px solid #E2E8F0; page-break-inside: avoid; }
-          .condition-item { margin-bottom: 3px; }
+          /* CONDIÇÕES COMERCIAIS E TOTAL COMPACTOS */
+          .bottom-flex { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; page-break-inside: avoid; }
+          .conditions-box { flex: 1; background: #F1F5F9; border-radius: 5px; padding: 8px 10px; font-size: 9.5px; border: 1px solid #E2E8F0; }
+          .condition-item { margin-bottom: 2px; }
           .condition-item strong { color: #0F172A; }
 
-          /* TOTAL */
-          .summary-wrapper { display: flex; justify-content: flex-end; margin-bottom: 18px; page-break-inside: avoid; }
-          .summary-card { width: 240px; background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border-radius: 8px; padding: 12px 16px; color: #FFFFFF; }
-          .summary-label { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: #94A3B8; margin-bottom: 2px; }
-          .summary-amount { font-size: 17px; font-weight: 800; background: linear-gradient(90deg, #A5B4FC 0%, #F472B6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+          .summary-card { width: 220px; background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border-radius: 6px; padding: 10px 14px; color: #FFFFFF; }
+          .summary-label { font-size: 8.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: #94A3B8; margin-bottom: 2px; }
+          .summary-amount { font-size: 16px; font-weight: 800; background: linear-gradient(90deg, #A5B4FC 0%, #F472B6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 
           /* ASSINATURAS */
-          .signatures-grid { display: flex; justify-content: space-between; gap: 30px; margin-top: 24px; page-break-inside: avoid; }
-          .signature-line { flex: 1; border-top: 1px solid #94A3B8; text-align: center; padding-top: 5px; font-size: 10.5px; color: #475569; }
+          .signatures-grid { display: flex; justify-content: space-between; gap: 24px; margin-top: 16px; page-break-inside: avoid; }
+          .signature-line { flex: 1; border-top: 1px solid #94A3B8; text-align: center; padding-top: 4px; font-size: 9.5px; color: #475569; }
+          .sig-date { font-size: 8.5px; color: #94A3B8; margin-top: 2px; }
 
-          .footer { padding-top: 12px; border-top: 1px solid #E2E8F0; text-align: center; font-size: 9.5px; color: #94A3B8; margin-top: 12px; page-break-inside: avoid; }
+          .footer { padding-top: 8px; border-top: 1px solid #E2E8F0; text-align: center; font-size: 8.5px; color: #94A3B8; margin-top: 10px; page-break-inside: avoid; }
         </style>
       </head>
       <body>
@@ -214,7 +223,7 @@ export class PDFService {
         </div>
 
         ${cleanDescription ? `
-          <div class="section-title">💡 Visão Estratégica & Proposta</div>
+          <div class="section-title">💡 Visão Estratégica & Enquadramento</div>
           <div class="description-box">${cleanDescription}</div>
         ` : ''}
 
@@ -233,26 +242,26 @@ export class PDFService {
           <tbody>${itemsRows}</tbody>
         </table>
 
-        <div class="summary-wrapper">
+        <div class="bottom-flex">
+          <div class="conditions-box">
+            <div class="condition-item"><strong>Condições de Pagamento:</strong> ${proposal.paymentTerms || '50% na aprovação e 50% após entrega final.'}</div>
+            ${proposal.deliveryDeadline ? `<div class="condition-item"><strong>Prazo de Entrega:</strong> ${proposal.deliveryDeadline}</div>` : ''}
+            <div class="condition-item"><strong>Política de Revisões:</strong> ${proposal.revisionPolicy || 'Até 2 rodadas de revisões gratuitas incluídas.'}</div>
+          </div>
           <div class="summary-card">
             <div class="summary-label">Valor Total da Parceria</div>
             <div class="summary-amount">${this.formatCurrency(proposal.totalAmount, proposal.currency)}</div>
           </div>
         </div>
 
-        <div class="section-title">📝 Condições Comerciais</div>
-        <div class="conditions-box">
-          ${proposal.paymentTerms ? `<div class="condition-item"><strong>Pagamento:</strong> ${proposal.paymentTerms}</div>` : '<div class="condition-item"><strong>Pagamento:</strong> 50% na aprovação e 50% após entrega final.</div>'}
-          ${proposal.deliveryDeadline ? `<div class="condition-item"><strong>Prazo de Entrega:</strong> ${proposal.deliveryDeadline}</div>` : ''}
-          ${proposal.revisionPolicy ? `<div class="condition-item"><strong>Revisões:</strong> ${proposal.revisionPolicy}</div>` : '<div class="condition-item"><strong>Revisões:</strong> Inclui até 2 rodadas de revisões antes da publicação.</div>'}
-        </div>
-
         <div class="signatures-grid">
           <div class="signature-line">
-            <strong>${proposal.creatorName}</strong><br />Criador / Representante
+            <strong>${proposal.creatorName}</strong><br />Representante do Criador / Agência
+            <div class="sig-date">Data: ____/____/2026</div>
           </div>
           <div class="signature-line">
             <strong>${proposal.brandName}</strong><br />Aceitação do Cliente / Marca
+            <div class="sig-date">Data: ____/____/2026</div>
           </div>
         </div>
 
