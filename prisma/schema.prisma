@@ -156,6 +156,17 @@ model Proposal {
   status      ProposalStatus @default(DRAFT)
   validUntil  DateTime
 
+  // 🚀 NOVOS CAMPOS COMERCIAIS E CONTRATUAIS
+  paymentTerms     String?        @db.Text // ex: "50% no ato do contrato e 50% na entrega"
+  deliveryDeadline String?        // ex: "10 dias úteis após envio do briefing"
+  revisionPolicy   String?        // ex: "Até 2 rodadas de revisões gratuitas"
+  cancellationTerms String?       @db.Text // Termos de cancelamento
+  
+  // 🚀 NOVO CAMPO: SNAPSHOT DE MÉTRICAS & PORTFÓLIO ("Porquê trabalhar connosco?")
+  // Armazena dados das redes sociais selecionadas para justificativa de valor no PDF
+  includeMetrics   Boolean        @default(true)
+  metricsSnapshot  Json?          // { followers: 150000, avgReach: 45000, engagementRate: "4.8%", topDemographics: "18-34 anos (68% F)" }
+
   items       ProposalItem[]
 
   createdAt   DateTime       @default(now())

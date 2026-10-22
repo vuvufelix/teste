@@ -13,6 +13,16 @@ export const createProposalSchema = z.object({
   description: z.string().optional(),
   currency: z.enum(['USD', 'AOA', 'BRL']).default('USD'),
   validUntil: z.string().datetime({ message: 'Data de validade deve ser uma data ISO válida.' }),
+
+  // Novas Condições Comerciais
+  paymentTerms: z.string().optional(),
+  deliveryDeadline: z.string().optional(),
+  revisionPolicy: z.string().optional(),
+  cancellationTerms: z.string().optional(),
+  
+  // Opção de anexar métricas automáticas do Media Kit
+  includeMetrics: z.boolean().default(true),
+
   items: z.array(proposalItemSchema).min(1, 'A proposta deve ter no mínimo 1 item entregável.'),
 });
 

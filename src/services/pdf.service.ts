@@ -1,12 +1,5 @@
 import puppeteer from 'puppeteer';
 
-export interface ProposalItemData {
-  deliverable: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
-}
-
 export interface ProposalPDFData {
   id: string;
   title: string;
@@ -20,13 +13,22 @@ export interface ProposalPDFData {
   creatorName: string;
   creatorEmail: string;
   creatorPhone?: string | null;
-  items: ProposalItemData[];
+  creatorAvatar?: string | null;
+  paymentTerms?: string | null;
+  deliveryDeadline?: string | null;
+  revisionPolicy?: string | null;
+  cancellationTerms?: string | null;
+  metricsSnapshot?: {
+    totalFollowers?: number | string;
+    avgReach?: number | string;
+    avgViews?: number | string;
+    engagementRate?: string;
+    networks?: Array<{ name: string; handle: string; followers: number }>;
+  } | null;
+  items: Array<{ deliverable: string; quantity: number; unitPrice: number; totalPrice: number }>;
 }
 
 export class PDFService {
-  /**
-   * Formata valores monetários respeitando a moeda e padrão do sistema
-   */
   private static formatCurrency(amount: number, currency: string): string {
     const localeMap: Record<string, string> = {
       AOA: 'pt-AO',
@@ -34,9 +36,7 @@ export class PDFService {
       USD: 'en-US',
       EUR: 'de-DE',
     };
-
     const locale = localeMap[currency] || 'pt-PT';
-
     try {
       return new Intl.NumberFormat(locale, {
         style: 'currency',
@@ -48,36 +48,54 @@ export class PDFService {
     }
   }
 
-  /**
-   * Gera o HTML elegante e responsivo para conversão em PDF
-   */
   static generateProposalHTML(proposal: ProposalPDFData): string {
     const formattedValidUntil = new Date(proposal.validUntil).toLocaleDateString('pt-PT', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
+      day: '2-digit', month: 'long', year: 'numeric',
     });
-
     const formattedCreatedAt = new Date(proposal.createdAt).toLocaleDateString('pt-PT', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
+      day: '2-digit', month: 'long', year: 'numeric',
     });
 
-    const itemsRows = proposal.items
-      .map(
-        (item) => `
-        <tr>
-          <td class="deliverable-cell">
-            <span class="item-title">${item.deliverable}</span>
-          </td>
-          <td class="center-cell">${item.quantity}</td>
-          <td class="right-cell">${this.formatCurrency(item.unitPrice, proposal.currency)}</td>
-          <td class="right-cell bold-cell">${this.formatCurrency(item.totalPrice, proposal.currency)}</td>
-        </tr>
-      `
-      )
-      .join('');
+    const itemsRows = proposal.items.map(item => `
+      <tr>
+        <td class="deliverable-cell">
+          <span class="item-title">${item.deliverable}</span>
+        </td>
+        <td class="center-cell">${item.quantity}</td>
+        <td class="right-cell">${this.formatCurrency(item.unitPrice, proposal.currency)}</td>
+        <td class="right-cell bold-cell">${this.formatCurrency(item.totalPrice, proposal.currency)}</td>
+      </tr>
+    `).join('');
+
+    const metricsHtml = proposal.metricsSnapshot ? `
+      <div class="section-title">📊 Porquê Trabalhar Connosco? (Métricas e Alcance)</div>
+      <div class="metrics-grid">
+        ${proposal.metricsSnapshot.totalFollowers ? `
+          <div class="metric-card">
+            <div class="metric-value">${proposal.metricsSnapshot.totalFollowers}</div>
+            <div class="metric-label">Seguidores Totais</div>
+          </div>
+        ` : ''}
+        ${proposal.metricsSnapshot.avgReach ? `
+          <div class="metric-card">
+            <div class="metric-value">${proposal.metricsSnapshot.avgReach}</div>
+            <div class="metric-label">Alcance Médio / Post</div>
+          </div>
+        ` : ''}
+        ${proposal.metricsSnapshot.avgViews ? `
+          <div class="metric-card">
+            <div class="metric-value">${proposal.metricsSnapshot.avgViews}</div>
+            <div class="metric-label">Visualizações Médias</div>
+          </div>
+        ` : ''}
+        ${proposal.metricsSnapshot.engagementRate ? `
+          <div class="metric-card">
+            <div class="metric-value">${proposal.metricsSnapshot.engagementRate}</div>
+            <div class="metric-label">Taxa de Envolvimento</div>
+          </div>
+        ` : ''}
+      </div>
+    ` : '';
 
     return `
       <!DOCTYPE html>
@@ -86,264 +104,90 @@ export class PDFService {
         <meta charset="UTF-8">
         <title>Proposta Comercial - ${proposal.title}</title>
         <style>
-          @page {
-            size: A4;
-            margin: 0;
-          }
-          * {
-            box-sizing: border-box;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
+          @page { size: A4; margin: 0; }
+          * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            color: #0F172A;
-            margin: 0;
-            padding: 0;
-            background-color: #FFFFFF;
-            font-size: 13px;
-            line-height: 1.5;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: #0F172A; margin: 0; padding: 0; background-color: #FFFFFF; font-size: 13px; line-height: 1.5;
           }
+          .header-bar { height: 8px; background: linear-gradient(90deg, #6366F1 0%, #8B5CF6 50%, #EC4899 100%); }
+          .container { padding: 36px 48px; }
+          .brand-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 20px; margin-bottom: 28px; }
+          .creator-profile { display: flex; align-items: center; gap: 14px; }
+          .creator-avatar { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid #6366F1; }
+          .creator-info h2 { margin: 0; font-size: 18px; font-weight: 800; color: #0F172A; }
+          .creator-info p { margin: 2px 0 0; font-size: 12px; color: #64748B; }
+          .proposal-meta { text-align: right; }
+          .proposal-badge { display: inline-block; background: #EEF2FF; color: #4F46E5; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 20px; margin-bottom: 6px; letter-spacing: 0.5px; }
+          .meta-date { font-size: 11px; color: #64748B; margin: 2px 0; }
+          .valid-until { color: #E11D48; font-weight: 600; }
+          .doc-title { font-size: 22px; font-weight: 800; color: #0F172A; margin: 0 0 20px 0; letter-spacing: -0.5px; }
+          
+          /* METRICS GRID */
+          .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; color: #4F46E5; letter-spacing: 0.8px; margin: 24px 0 12px; }
+          .metrics-grid { display: flex; gap: 12px; margin-bottom: 24px; }
+          .metric-card { flex: 1; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px 16px; text-align: center; }
+          .metric-value { font-size: 18px; font-weight: 800; color: #0F172A; }
+          .metric-label { font-size: 11px; color: #64748B; font-weight: 500; margin-top: 2px; }
 
-          /* TOPO / HEADER DA MARCA */
-          .header-bar {
-            height: 8px;
-            background: linear-gradient(90deg, #6366F1 0%, #8B5CF6 50%, #EC4899 100%);
-            width: 100%;
-          }
+          /* CARDS CLIENTE / CRIADOR */
+          .party-grid { display: table; width: 100%; margin-bottom: 24px; }
+          .party-col { display: table-cell; width: 50%; vertical-align: top; }
+          .party-col:first-child { padding-right: 12px; }
+          .party-col:last-child { padding-left: 12px; }
+          .party-card { background: #F8FAFC; border-radius: 10px; padding: 16px; border: 1px solid #E2E8F0; }
+          .party-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #6366F1; letter-spacing: 1px; margin-bottom: 6px; }
+          .party-name { font-size: 14px; font-weight: 700; color: #0F172A; margin: 0 0 4px 0; }
+          .party-detail { font-size: 12px; color: #475569; margin: 2px 0; }
 
-          .container {
-            padding: 40px 50px;
-          }
-
-          /* BANNER DO INFLUKIT E NÚMERO DA PROPOSTA */
-          .brand-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #E2E8F0;
-            padding-bottom: 24px;
-            margin-bottom: 32px;
-          }
-
-          .brand-logo {
-            font-size: 28px;
-            font-weight: 800;
-            letter-spacing: -1px;
-          }
-          .brand-logo .influ { color: #0F172A; }
-          .brand-logo .kit {
-            background: linear-gradient(135deg, #6366F1 0%, #EC4899 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-          }
-          .brand-tagline {
-            font-size: 10px;
-            font-weight: 600;
-            color: #64748B;
-            letter-spacing: 2px;
-            margin-top: 2px;
-            text-transform: uppercase;
-          }
-
-          .proposal-meta {
-            text-align: right;
-          }
-          .proposal-badge {
-            display: inline-block;
-            background: #F1F5F9;
-            color: #475569;
-            font-size: 11px;
-            font-weight: 700;
-            padding: 4px 12px;
-            border-radius: 20px;
-            margin-bottom: 6px;
-            letter-spacing: 0.5px;
-          }
-          .meta-date {
-            font-size: 12px;
-            color: #64748B;
-            margin: 2px 0;
-          }
-          .valid-until {
-            color: #E11D48;
-            font-weight: 600;
-          }
-
-          /* TÍTULO DA PROPOSTA */
-          .doc-title {
-            font-size: 22px;
-            font-weight: 800;
-            color: #0F172A;
-            margin: 0 0 24px 0;
-            letter-spacing: -0.5px;
-          }
-
-          /* GRID DE INFORMAÇÕES DE CONTATO */
-          .party-grid {
-            display: table;
-            width: 100%;
-            margin-bottom: 32px;
-          }
-          .party-col {
-            display: table-cell;
-            width: 50%;
-            vertical-align: top;
-          }
-          .party-col:first-child {
-            padding-right: 16px;
-          }
-          .party-col:last-child {
-            padding-left: 16px;
-          }
-
-          .party-card {
-            background: #F8FAFC;
-            border-radius: 12px;
-            padding: 18px 20px;
-            border: 1px solid #E2E8F0;
-            height: 100%;
-          }
-          .party-label {
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            color: #6366F1;
-            letter-spacing: 1px;
-            margin-bottom: 8px;
-          }
-          .party-name {
-            font-size: 15px;
-            font-weight: 700;
-            color: #0F172A;
-            margin: 0 0 4px 0;
-          }
-          .party-detail {
-            font-size: 13px;
-            color: #475569;
-            margin: 2px 0;
-          }
-
-          /* NOTA / DESCRIÇÃO */
-          .description-box {
-            background: #F0FDF4;
-            border-left: 4px solid #10B981;
-            border-radius: 0 8px 8px 0;
-            padding: 14px 18px;
-            margin-bottom: 32px;
-            font-size: 13px;
-            color: #166534;
-          }
-          .description-title {
-            font-weight: 700;
-            margin-bottom: 4px;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-          }
-
-          /* TABELA DE ENTREGÁVEIS */
-          table.items-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 32px;
-            page-break-inside: avoid;
-          }
-          table.items-table th {
-            background: #F8FAFC;
-            color: #475569;
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            padding: 12px 16px;
-            border-bottom: 2px solid #E2E8F0;
-            text-align: left;
-          }
-          table.items-table td {
-            padding: 14px 16px;
-            border-bottom: 1px solid #F1F5F9;
-            color: #334155;
-          }
-          .deliverable-cell {
-            width: 45%;
-          }
-          .item-title {
-            font-weight: 600;
-            color: #0F172A;
-          }
+          /* TABELA */
+          table.items-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; page-break-inside: avoid; }
+          table.items-table th { background: #F8FAFC; color: #475569; font-size: 11px; font-weight: 700; text-transform: uppercase; padding: 10px 14px; border-bottom: 2px solid #E2E8F0; text-align: left; }
+          table.items-table td { padding: 12px 14px; border-bottom: 1px solid #F1F5F9; color: #334155; }
+          .deliverable-cell { width: 45%; }
+          .item-title { font-weight: 600; color: #0F172A; }
           .center-cell { text-align: center; }
           .right-cell { text-align: right; }
           .bold-cell { font-weight: 700; color: #0F172A; }
 
-          /* CAIXA DE TOTALIZAÇÃO */
-          .summary-wrapper {
-            display: flex;
-            justify-content: flex-end;
-            margin-bottom: 40px;
-            page-break-inside: avoid;
-          }
-          .summary-card {
-            width: 280px;
-            background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
-            border-radius: 12px;
-            padding: 20px;
-            color: #FFFFFF;
-            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.2);
-          }
-          .summary-label {
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #94A3B8;
-            margin-bottom: 6px;
-          }
-          .summary-amount {
-            font-size: 24px;
-            font-weight: 800;
-            background: linear-gradient(90deg, #A5B4FC 0%, #F472B6 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-          }
+          /* CONDICIONS COMERCIAIS */
+          .conditions-box { background: #F1F5F9; border-radius: 10px; padding: 16px; margin-bottom: 24px; font-size: 12px; border: 1px solid #E2E8F0; }
+          .condition-item { margin-bottom: 6px; }
+          .condition-item strong { color: #0F172A; }
 
-          /* RODAPÉ */
-          .footer {
-            margin-top: auto;
-            padding-top: 24px;
-            border-top: 1px solid #E2E8F0;
-            text-align: center;
-            font-size: 11px;
-            color: #94A3B8;
-          }
-          .footer-brand {
-            font-weight: 700;
-            color: #6366F1;
-          }
+          /* TOTAL */
+          .summary-wrapper { display: flex; justify-content: flex-end; margin-bottom: 32px; page-break-inside: avoid; }
+          .summary-card { width: 280px; background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border-radius: 12px; padding: 18px 22px; color: #FFFFFF; }
+          .summary-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #94A3B8; margin-bottom: 4px; }
+          .summary-amount { font-size: 22px; font-weight: 800; background: linear-gradient(90deg, #A5B4FC 0%, #F472B6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+          /* ASSINATURAS */
+          .signatures-grid { display: flex; justify-content: space-between; gap: 40px; margin-top: 40px; page-break-inside: avoid; }
+          .signature-line { flex: 1; border-top: 1px solid #94A3B8; text-align: center; padding-top: 8px; font-size: 11px; color: #475569; }
+
+          .footer { padding-top: 20px; border-top: 1px solid #E2E8F0; text-align: center; font-size: 10px; color: #94A3B8; margin-top: 20px; }
         </style>
       </head>
       <body>
         <div class="header-bar"></div>
-
         <div class="container">
-          <!-- CABEÇALHO -->
           <div class="brand-header">
-            <div>
-              <div class="brand-logo">
-                <span class="influ">Influ</span><span class="kit">kit</span>
+            <div class="creator-profile">
+              ${proposal.creatorAvatar ? `<img src="${proposal.creatorAvatar}" class="creator-avatar" />` : ''}
+              <div class="creator-info">
+                <h2>${proposal.creatorName}</h2>
+                <p>Proposta Comercial de Conteúdo & Parceria</p>
               </div>
-              <div class="brand-tagline">Media Kits & Propostas Comerciais</div>
             </div>
             <div class="proposal-meta">
               <div class="proposal-badge">PROPOSTA COMERCIAL</div>
               <div class="meta-date">Emissão: ${formattedCreatedAt}</div>
-              <div class="meta-date valid-until">Válido até: ${formattedValidUntil}</div>
+              <div class="meta-date valid-until">Válida até: ${formattedValidUntil}</div>
             </div>
           </div>
 
           <h1 class="doc-title">${proposal.title}</h1>
 
-          <!-- ENVOLVIDOS (DE / PARA) -->
           <div class="party-grid">
             <div class="party-col">
               <div class="party-card">
@@ -362,44 +206,46 @@ export class PDFService {
             </div>
           </div>
 
-          <!-- NOTA/DESCRIÇÃO SE EXISTIR -->
-          ${
-            proposal.description
-              ? `
-            <div class="description-box">
-              <div class="description-title">Observações do Projeto</div>
-              <div>${proposal.description}</div>
-            </div>
-          `
-              : ''
-          }
+          ${metricsHtml}
 
-          <!-- TABELA DE ITENS -->
+          <div class="section-title">📋 Entregáveis & Investimento</div>
           <table class="items-table">
             <thead>
               <tr>
-                <th style="width: 45%;">Entregável / Serviço</th>
-                <th style="text-align: center; width: 15%;">Qtd</th>
-                <th style="text-align: right; width: 20%;">Valor Unit.</th>
-                <th style="text-align: right; width: 20%;">Total</th>
+                <th>Serviço / Entregável</th>
+                <th style="text-align: center;">Qtd</th>
+                <th style="text-align: right;">Preço Unit.</th>
+                <th style="text-align: right;">Subtotal</th>
               </tr>
             </thead>
-            <tbody>
-              ${itemsRows}
-            </tbody>
+            <tbody>${itemsRows}</tbody>
           </table>
 
-          <!-- TOTAL -->
           <div class="summary-wrapper">
             <div class="summary-card">
-              <div class="summary-label">Valor Total do Acordo</div>
+              <div class="summary-label">Valor Total da Parceria</div>
               <div class="summary-amount">${this.formatCurrency(proposal.totalAmount, proposal.currency)}</div>
             </div>
           </div>
 
-          <!-- RODAPÉ -->
+          <div class="section-title">📝 Condições Comerciais</div>
+          <div class="conditions-box">
+            ${proposal.paymentTerms ? `<div class="condition-item"><strong>Pagamento:</strong> ${proposal.paymentTerms}</div>` : '<div class="condition-item"><strong>Pagamento:</strong> 50% na aprovação e 50% após entrega final.</div>'}
+            ${proposal.deliveryDeadline ? `<div class="condition-item"><strong>Prazo de Entrega:</strong> ${proposal.deliveryDeadline}</div>` : ''}
+            ${proposal.revisionPolicy ? `<div class="condition-item"><strong>Revisões:</strong> ${proposal.revisionPolicy}</div>` : '<div class="condition-item"><strong>Revisões:</strong> Inclui até 2 rodadas de revisões antes da publicação.</div>'}
+          </div>
+
+          <div class="signatures-grid">
+            <div class="signature-line">
+              <strong>${proposal.creatorName}</strong><br />Criador / Representante
+            </div>
+            <div class="signature-line">
+              <strong>${proposal.brandName}</strong><br />Aceitação do Cliente / Marca
+            </div>
+          </div>
+
           <div class="footer">
-            Proposta gerada automaticamente via <span class="footer-brand">Influkit</span> • Documento digital de negociação comercial.
+            Documento gerado por <strong>Influkit</strong> • Plataforma de Gestão para Criadores e Agências
           </div>
         </div>
       </body>
@@ -407,12 +253,8 @@ export class PDFService {
     `;
   }
 
-  /**
-   * Converte o HTML gerado em um Buffer PDF binário pronto para download/envio
-   */
   static async generateProposalPDFBuffer(proposal: ProposalPDFData): Promise<Buffer> {
     const html = this.generateProposalHTML(proposal);
-
     const browser = await puppeteer.launch({
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
@@ -421,18 +263,11 @@ export class PDFService {
     try {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'domcontentloaded' });
-
       const pdfBuffer = await page.pdf({
         format: 'A4',
         printBackground: true,
-        margin: {
-          top: '0px',
-          bottom: '0px',
-          left: '0px',
-          right: '0px',
-        },
+        margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' },
       });
-
       return Buffer.from(pdfBuffer);
     } finally {
       await browser.close();
