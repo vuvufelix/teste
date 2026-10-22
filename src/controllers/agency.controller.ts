@@ -374,4 +374,176 @@ export class AgencyController {
 
     return res.status(200).json({ agency });
   }
+
+  // 10. Agência atualiza o seu próprio perfil, biografia e foto de perfil (armazenada no MediaKit da agência)
+  static async updateAgencyProfile(req: AuthenticatedRequest, res: Response) {
+    if (!req.user || req.user.role !== 'AGENCY') {
+      return res.status(403).json({ error: 'Acesso negado.' });
+    }
+
+    const { name, bio, profilePicture } = req.body;
+
+    // Atualiza o nome na tabela User se fornecido
+    if (name) {
+      await prisma.user.update({
+        where: { id: req.user.id },
+        data: { name },
+      });
+    }
+
+    // Upsert no MediaKit da agência para guardar/atualizar bio e profilePicture
+    const mediaKit = await prisma.mediaKit.upsert({
+      where: { userId: req.user.id },
+      update: {
+        ...(bio !== undefined ? { bio } : {}),
+        ...(profilePicture !== undefined ? { profilePicture } : {}),
+      },
+      create: {
+        userId: req.user.id,
+        slug: `agency-${req.user.id.slice(0, 8)}`,
+        bio: bio || null,
+        profilePicture: profilePicture || null,
+        isPublic: false,
+      },
+    });
+
+    const updatedUser = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, name: true, email: true },
+    });
+
+    return res.status(200).json({
+      message: 'Perfil da agência atualizado com sucesso!',
+      agency: {
+        id: updatedUser?.id,
+        name: updatedUser?.name,
+        email: updatedUser?.email,
+        bio: mediaKit.bio,
+        profilePicture: mediaKit.profilePicture,
+      },
+    });
+  }
+
+  // 11. Agência pesquisa influenciadores disponíveis na plataforma
+  static async searchInfluencers(req: AuthenticatedRequest, res: Response) {
+    if (!req.user || req.user.role !== 'AGENCY') {
+      return res.status(403).json({ error: 'Acesso negado.' });
+    }
+
+    const { query } = req.query;
+    const searchTerm = (query as string) || '';
+
+    const influencers = await prisma.user.findMany({
+      where: {
+        role: 'INFLUENCER',
+        OR: [
+          { name: { contains: searchTerm } },
+          { email: { contains: searchTerm } },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        subscriptionStatus: true,
+        mediaKit: {
+          select: {
+            slug: true,
+            profilePicture: true,
+            bio: true,
+            niche: true,
+            location: true,
+          },
+        },
+      },
+      take: 20,
+    });
+
+    const formattedInfluencers = influencers.map((inf: any) => ({
+      id: inf.id,
+      name: inf.name,
+      email: inf.email,
+      subscriptionStatus: inf.subscriptionStatus,
+      profilePicture: inf.mediaKit?.profilePicture || null,
+      mediaKitSlug: inf.mediaKit?.slug || null,
+      bio: inf.mediaKit?.bio || null,
+      niche: inf.mediaKit?.niche || null,
+      location: inf.mediaKit?.location || null,
+    }));
+
+    return res.status(200).json({ influencers: formattedInfluencers });
+  }
+
+  // 12. Agência visualiza o Mídia Kit detalhado de um influenciador específico
+  static async getInfluencerMediaKitDetails(req: AuthenticatedRequest, res: Response) {
+    if (!req.user || req.user.role !== 'AGENCY') {
+      return res.status(403).json({ error: 'Acesso negado.' });
+    }
+
+    const { influencerId } = req.params;
+
+    const mediaKit = await prisma.mediaKit.findUnique({
+      where: { userId: influencerId },
+      include: {
+        socialNetworks: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!mediaKit) {
+      return res.status(404).json({ error: 'Mídia Kit não encontrado para este influenciador.' });
+    }
+
+    return res.status(200).json({ mediaKit });
+  }
+
+  // 13. Agência busca os dados do seu próprio perfil e foto
+  static async getProfile(req: AuthenticatedRequest, res: Response) {
+    if (!req.user || req.user.role !== 'AGENCY') {
+      return res.status(403).json({ error: 'Acesso negado.' });
+    }
+
+    try {
+      const agencyUser = await prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          mediaKit: {
+            select: {
+              bio: true,
+              profilePicture: true,
+              location: true,
+            },
+          },
+        },
+      });
+
+      if (!agencyUser) {
+        return res.status(404).json({ error: 'Utilizador agência não encontrado.' });
+      }
+
+      const agency = {
+        id: agencyUser.id,
+        name: agencyUser.name,
+        email: agencyUser.email,
+        role: agencyUser.role,
+        bio: agencyUser.mediaKit?.bio || '',
+        profilePicture: agencyUser.mediaKit?.profilePicture || null,
+        location: agencyUser.mediaKit?.location || null,
+      };
+
+      return res.status(200).json({ agency });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message || 'Erro ao buscar perfil da agência.' });
+    }
+  }
 }

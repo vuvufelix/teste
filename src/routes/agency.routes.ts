@@ -6,6 +6,14 @@ const agencyRoutes = Router();
 
 agencyRoutes.use(ensureAuthenticated);
 
+// --- Rotas de Perfil da Agência ---
+agencyRoutes.get('/profile', AgencyController.getProfile); // Obter perfil da agência
+agencyRoutes.put('/profile', AgencyController.updateAgencyProfile); // Atualizar foto/biografia da agência
+
+// --- Rotas de Pesquisa e Media Kit de Influenciadores ---
+agencyRoutes.get('/influencers/search', AgencyController.searchInfluencers); // Pesquisar criadores
+agencyRoutes.get('/influencers/:influencerId/mediakit', AgencyController.getInfluencerMediaKitDetails); // Ver mídia kit de um influenciador
+
 // --- Rotas de Convites & Delegações ---
 agencyRoutes.post('/invite', AgencyController.inviteCreator); // Agência envia convite
 agencyRoutes.get('/invites/sent', AgencyController.getAgencySentInvites); // Agência vê todos os convites enviados

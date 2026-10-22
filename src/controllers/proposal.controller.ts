@@ -293,7 +293,7 @@ export class ProposalController {
     }
   }
 
-  // Gerar texto da proposta com IA (Gemini) - Com validação de plano e suporte a Trial
+  // Gerar texto da proposta com IA (Gemini) - Suporta Agências vs Criadores Individuais
   static async generateAIProposalText(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
 
@@ -302,6 +302,8 @@ export class ProposalController {
       return res.status(400).json({ error: 'Informe o nome da marca e o título da proposta.' });
     }
 
+    // Se for uma agência a gerar em nome de um criador delegado, podemos opcionalmente verificar, 
+    // mas o remetente principal é o utilizador autenticado (req.user) ou a agência.
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
       include: { 
@@ -315,7 +317,7 @@ export class ProposalController {
     const isSuperAdmin = user.role === 'SUPER_ADMIN';
     const isTrialing = user.subscriptionStatus === 'TRIALING';
 
-    // 🔒 Regra de Negócio: Se não for admin, não estiver em trial e o plano não permitir IA, bloqueia!
+    // 🔒 Regra de Negócio: Validação de Acesso à IA
     if (!isSuperAdmin && !isTrialing && (!user.plan || !user.plan.hasAIAssistant)) {
       return res.status(403).json({
         error: 'A geração de propostas com Inteligência Artificial é exclusiva dos planos Pro e Agência. Faça um upgrade para desbloquear.',
@@ -323,8 +325,9 @@ export class ProposalController {
       });
     }
 
-    const creatorName = user.name || 'Criador de Conteúdo';
-    const niche = user.mediaKit?.niche || 'Marketing Digital';
+    const isAgency = user.role === 'AGENCY';
+    const creatorName = user.name || (isAgency ? 'Agência de Talentos' : 'Criador de Conteúdo');
+    const niche = user.mediaKit?.niche || 'Marketing de Influência';
 
     try {
       const aiMessage = await AIService.generateProposalMessage({
@@ -332,6 +335,7 @@ export class ProposalController {
         brandName,
         niche,
         proposalTitle,
+        isAgency, // 👈 Passa a flag para a IA gerar o texto corporativo ou individual
       });
 
       return res.status(200).json({ message: 'Texto gerado com sucesso!', aiMessage });
