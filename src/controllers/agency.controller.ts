@@ -26,7 +26,7 @@ export class AgencyController {
     }
 
     const isSuperAdmin = agencyUser.role === 'SUPER_ADMIN';
-    const isTrialing = agencyUser.subscriptionStatus === 'TRIALING'
+    const isTrialing = agencyUser.subscriptionStatus === 'TRIALING';
     const isActive = agencyUser.subscriptionStatus === 'ACTIVE';
 
     // 🔒 Verificação de Assinatura da Agência
@@ -51,7 +51,6 @@ export class AgencyController {
       return res.status(404).json({ error: 'Criador não encontrado na plataforma Influkit.' });
     }
 
-    // Correção: O enum Role no Prisma utiliza 'CREATOR'
     if (creator.role !== 'INFLUENCER') {
       return res.status(400).json({ error: 'O e-mail informado não pertence a uma conta válida de criador.' });
     }
@@ -88,35 +87,116 @@ export class AgencyController {
     });
   }
 
-  // 2. Criador lista os convites pendentes que recebeu de agências
+  // 2. Criador lista os convites pendentes que recebeu de agências (Com foto da agência)
   static async getMyPendingInvites(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
 
-    const invites = await prisma.agencyDelegation.findMany({
+    const delegations = await prisma.agencyDelegation.findMany({
       where: {
         creatorId: req.user.id,
         status: 'PENDING',
       },
       include: {
         agency: {
-          select: { id: true, name: true, email: true },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            mediaKit: {
+              select: { profilePicture: true },
+            },
+          },
         },
       },
+      orderBy: { createdAt: 'desc' },
     });
+
+    // Formata para injetar a profilePicture da agência de forma limpa
+    const invites = delegations.map((d: any) => ({
+      id: d.id,
+      status: d.status,
+      createdAt: d.createdAt,
+      agency: {
+        id: d.agency.id,
+        name: d.agency.name,
+        email: d.agency.email,
+        profilePicture: d.agency.mediaKit?.profilePicture || null,
+      },
+    }));
 
     return res.status(200).json({ invites });
   }
 
-  // 3. Criador aceita ou recusa o convite da agência
+  // 3. Agência lista todos os convites que enviou (Pendentes, Aceites, etc.)
+  static async getAgencySentInvites(req: AuthenticatedRequest, res: Response) {
+    if (!req.user || req.user.role !== 'AGENCY') {
+      return res.status(403).json({ error: 'Acesso negado.' });
+    }
+
+    const delegations = await prisma.agencyDelegation.findMany({
+      where: { agencyId: req.user.id },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            mediaKit: {
+              select: { profilePicture: true },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const invites = delegations.map((d: any) => ({
+      id: d.id,
+      status: d.status,
+      createdAt: d.createdAt,
+      creatorEmail: d.creator.email,
+      creatorName: d.creator.name,
+      profilePicture: d.creator.mediaKit?.profilePicture || null,
+    }));
+
+    return res.status(200).json({ invites });
+  }
+
+  // 4. Agência cancela/remove um convite enviado
+  static async cancelInvite(req: AuthenticatedRequest, res: Response) {
+    if (!req.user || req.user.role !== 'AGENCY') {
+      return res.status(403).json({ error: 'Acesso negado.' });
+    }
+
+    const { delegationId } = req.params;
+
+    const delegation = await prisma.agencyDelegation.findUnique({
+      where: { id: delegationId },
+    });
+
+    if (!delegation || delegation.agencyId !== req.user.id) {
+      return res.status(404).json({ error: 'Convite não encontrado.' });
+    }
+
+    await prisma.agencyDelegation.delete({
+      where: { id: delegationId },
+    });
+
+    return res.status(200).json({ message: 'Convite cancelado e removido com sucesso.' });
+  }
+
+  // 5. Criador aceita ou recusa o convite da agência
   static async respondToInvite(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
     
     const { delegationId } = req.params;
-    const { status } = req.body; // Esperado: 'ACCEPTED' ou 'REVOKED'
+    const { status } = req.body; // Esperado: 'ACCEPTED' ou 'REVOKED' (ou REJECTED)
 
-    if (!['ACCEPTED', 'REVOKED'].includes(status)) {
+    if (!['ACCEPTED', 'REVOKED', 'REJECTED'].includes(status)) {
       return res.status(400).json({ error: 'Status inválido. Use ACCEPTED ou REVOKED.' });
     }
+
+    const normalizedStatus = status === 'REJECTED' ? 'REVOKED' : status;
 
     const delegation = await prisma.agencyDelegation.findUnique({
       where: { id: delegationId },
@@ -128,22 +208,22 @@ export class AgencyController {
 
     const updatedDelegation = await prisma.agencyDelegation.update({
       where: { id: delegationId },
-      data: { status },
+      data: { status: normalizedStatus },
     });
 
     await NotificationService.sendPushToUser(delegation.agencyId, {
-        title: 'Convite Aceite! 🎉',
-        body: `${req.user.id} aceitou a sua solicitação de delegação.`,
-        url: '/agency/creators',
+        title: normalizedStatus === 'ACCEPTED' ? 'Convite Aceite! 🎉' : 'Convite Recusado',
+        body: `O criador atualizou o status do convite para ${normalizedStatus}.`,
+        url: '/dashboard/agency',
     });
 
     return res.status(200).json({
-      message: `Convite ${status === 'ACCEPTED' ? 'aceite' : 'rejeitado'} com sucesso.`,
+      message: `Convite atualizado com sucesso.`,
       delegation: updatedDelegation,
     });
   }
 
-  // 4. Agência lista todos os criadores com delegação ativa (ACCEPTED)
+  // 6. Agência lista todos os criadores com delegação ativa (ACCEPTED) com foto do Media Kit
   static async getMyManagedCreators(req: AuthenticatedRequest, res: Response) {
     if (!req.user || req.user.role !== 'AGENCY') {
       return res.status(403).json({ error: 'Acesso negado. Apenas agências podem consultar esta lista.' });
@@ -155,7 +235,7 @@ export class AgencyController {
     });
 
     const isSuperAdmin = agencyUser?.role === 'SUPER_ADMIN';
-    const isTrialing = agencyUser?.subscriptionStatus === 'TRIALING'
+    const isTrialing = agencyUser?.subscriptionStatus === 'TRIALING';
     const isActive = agencyUser?.subscriptionStatus === 'ACTIVE';
 
     if (!isActive && !isTrialing && !isSuperAdmin) {
@@ -178,15 +258,120 @@ export class AgencyController {
             email: true,
             subscriptionStatus: true,
             mediaKit: {
-              include: { socialNetworks: true },
+              select: {
+                slug: true,
+                profilePicture: true,
+                bio: true,
+                niche: true,
+              },
             },
           },
         },
       },
     });
 
-    const creators = delegations.map((d) => d.creator);
+    const creators = delegations.map((d: any) => ({
+      id: d.creator.id,
+      name: d.creator.name,
+      email: d.creator.email,
+      subscriptionStatus: d.creator.subscriptionStatus,
+      profilePicture: d.creator.mediaKit?.profilePicture || null,
+      mediaKitSlug: d.creator.mediaKit?.slug || null,
+      bio: d.creator.mediaKit?.bio || null,
+      delegationId: d.id,
+    }));
 
     return res.status(200).json({ creators });
+  }
+
+  // 7. Agência desassocia um criador específico
+  static async removeCreator(req: AuthenticatedRequest, res: Response) {
+    if (!req.user || req.user.role !== 'AGENCY') {
+      return res.status(403).json({ error: 'Acesso negado.' });
+    }
+
+    const { creatorId } = req.params;
+
+    const delegation = await prisma.agencyDelegation.findFirst({
+      where: {
+        agencyId: req.user.id,
+        creatorId,
+        status: 'ACCEPTED',
+      },
+    });
+
+    if (!delegation) {
+      return res.status(404).json({ error: 'Vínculo com o criador não encontrado.' });
+    }
+
+    await prisma.agencyDelegation.delete({
+      where: { id: delegation.id },
+    });
+
+    return res.status(200).json({ message: 'Criador desassociado com sucesso da agência.' });
+  }
+
+  // 8. Influenciador desassocia-se da agência
+  static async leaveAgency(req: AuthenticatedRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
+
+    const { agencyId } = req.body; // Opcional se houver mais do que uma agência
+
+    const whereClause: any = { creatorId: req.user.id, status: 'ACCEPTED' };
+    if (agencyId) whereClause.agencyId = agencyId;
+
+    const deleted = await prisma.agencyDelegation.deleteMany({
+      where: whereClause,
+    });
+
+    if (deleted.count === 0) {
+      return res.status(404).json({ error: 'Nenhuma associação ativa com agência encontrada.' });
+    }
+
+    return res.status(200).json({ message: 'Desassociado da agência com sucesso.' });
+  }
+
+  // 9. Influenciador vê os dados e a foto da agência à qual está associado
+  static async getMyAgencyDetails(req: AuthenticatedRequest, res: Response) {
+    if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
+
+    const delegation = await prisma.agencyDelegation.findFirst({
+      where: {
+        creatorId: req.user.id,
+        status: 'ACCEPTED',
+      },
+      include: {
+        agency: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            mediaKit: {
+              select: {
+                profilePicture: true,
+                bio: true,
+                location: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!delegation || !delegation.agency) {
+      return res.status(404).json({ error: 'Você não está associado a nenhuma agência.' });
+    }
+
+    const agencyData: any = delegation.agency;
+    const agency = {
+      id: agencyData.id,
+      name: agencyData.name,
+      email: agencyData.email,
+      profilePicture: agencyData.mediaKit?.profilePicture || null,
+      bio: agencyData.mediaKit?.bio || null,
+      location: agencyData.mediaKit?.location || null,
+    };
+
+    return res.status(200).json({ agency });
   }
 }
