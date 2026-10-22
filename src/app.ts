@@ -24,7 +24,7 @@ app.use(cors({
   origin: [env.FRONTEND_URL, 'http://localhost:3000'], // Permite ambas as portas
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-target-creator-id']
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());

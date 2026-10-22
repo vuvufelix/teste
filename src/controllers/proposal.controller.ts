@@ -147,24 +147,42 @@ export class ProposalController {
     const totalAmount = processedItems.reduce((acc, item) => acc + item.totalPrice, 0);
 
     // 🚀 Snapshot Rígido e Contextualizado das Métricas
+    // 🚀 Snapshot Rígido e Contextualizado das Métricas (Com suporte a agregação para Agências)
     let metricsSnapshot = null;
-    if (user.mediaKit && user.mediaKit.socialNetworks.length > 0) {
-      const networks = user.mediaKit.socialNetworks;
-      const totalFollowers = networks.reduce((acc, net) => acc + (net.followersCount || 0), 0);
-      const totalViews = networks.reduce((acc, net) => acc + (net.monthlyViews || 0), 0);
-      const avgEngagement = networks.reduce((acc, net) => acc + (net.engagementRate || 0), 0) / networks.length;
+    let networksToProcess = user.mediaKit?.socialNetworks || [];
 
-      // Verifica se existe alguma rede com dados de sincronização por API
-      const hasVerifiedApiData = networks.some((net) => (net as any).lastUpdated !== null && (net as any).lastUpdated !== undefined);
+    // Se for agência e não tiver redes próprias, agrega as redes de todos os criadores com delegação ACEPTE
+    if (user.role === 'AGENCY' && networksToProcess.length === 0) {
+      const delegations = await prisma.agencyDelegation.findMany({
+        where: { agencyId: user.id, status: 'ACCEPTED' },
+        include: {
+          creator: {
+            include: {
+              mediaKit: {
+                include: { socialNetworks: true }
+              }
+            }
+          }
+        }
+      });
+      networksToProcess = delegations.flatMap(d => d.creator.mediaKit?.socialNetworks || []);
+    }
+
+    if (networksToProcess.length > 0) {
+      const totalFollowers = networksToProcess.reduce((acc, net) => acc + (net.followersCount || 0), 0);
+      const totalViews = networksToProcess.reduce((acc, net) => acc + (net.monthlyViews || 0), 0);
+      const avgEngagement = networksToProcess.reduce((acc, net) => acc + (net.engagementRate || 0), 0) / networksToProcess.length;
+
+      const hasVerifiedApiData = networksToProcess.some((net: any) => net.lastUpdated !== null && net.lastUpdated !== undefined);
 
       metricsSnapshot = {
         totalFollowers: totalFollowers > 0 ? totalFollowers.toLocaleString('pt-PT') : undefined,
         avgViews: totalViews > 0 ? totalViews.toLocaleString('pt-PT') : undefined,
         engagementRate: avgEngagement > 0 ? `${avgEngagement.toFixed(1)}%` : undefined,
-        networksCount: networks.length,
+        networksCount: networksToProcess.length,
         isVerified: hasVerifiedApiData,
-        analysisPeriod: 'Últimos 30 dias',
-        networksList: networks.map((net) => ({
+        analysisPeriod: user.role === 'AGENCY' && !user.mediaKit?.socialNetworks?.length ? 'Últimos 30 dias (Rede Consolidada da Agência)' : 'Últimos 30 dias',
+        networksList: networksToProcess.map((net: any) => ({
           platform: net.platform,
           handle: net.handle || undefined,
           followers: net.followersCount || 0,
