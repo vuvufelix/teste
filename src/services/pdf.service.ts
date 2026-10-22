@@ -111,61 +111,65 @@ export class PDFService {
             color: #0F172A; margin: 0; padding: 0; background-color: #FFFFFF; font-size: 13px; line-height: 1.5;
           }
           .header-bar { height: 8px; background: linear-gradient(90deg, #6366F1 0%, #8B5CF6 50%, #EC4899 100%); }
-          .container { padding: 36px 48px; }
-          .brand-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 20px; margin-bottom: 28px; }
+          .container { padding: 32px 48px; }
+          .brand-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 16px; margin-bottom: 20px; page-break-inside: avoid; break-inside: avoid; }
           .creator-profile { display: flex; align-items: center; gap: 14px; }
-          .creator-avatar { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid #6366F1; }
-          .creator-info h2 { margin: 0; font-size: 18px; font-weight: 800; color: #0F172A; }
-          .creator-info p { margin: 2px 0 0; font-size: 12px; color: #64748B; }
+          .creator-avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid #6366F1; }
+          .creator-info h2 { margin: 0; font-size: 16px; font-weight: 800; color: #0F172A; }
+          .creator-info p { margin: 2px 0 0; font-size: 11px; color: #64748B; }
           .proposal-meta { text-align: right; }
-          .proposal-badge { display: inline-block; background: #EEF2FF; color: #4F46E5; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 20px; margin-bottom: 6px; letter-spacing: 0.5px; }
+          .proposal-badge { display: inline-block; background: #EEF2FF; color: #4F46E5; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 20px; margin-bottom: 4px; letter-spacing: 0.5px; }
           .meta-date { font-size: 11px; color: #64748B; margin: 2px 0; }
           .valid-until { color: #E11D48; font-weight: 600; }
-          .doc-title { font-size: 22px; font-weight: 800; color: #0F172A; margin: 0 0 20px 0; letter-spacing: -0.5px; }
+          .doc-title { font-size: 20px; font-weight: 800; color: #0F172A; margin: 0 0 14px 0; letter-spacing: -0.5px; page-break-inside: avoid; break-inside: avoid; }
+          
+          /* DESCRIÇÃO / VISÃO ESTRATÉGICA */
+          .description-box { background: #F8FAFC; border-left: 4px solid #6366F1; padding: 12px 14px; border-radius: 0 8px 8px 0; margin-bottom: 20px; font-size: 11.5px; color: #334155; line-height: 1.55; white-space: pre-line; page-break-inside: avoid; break-inside: avoid; }
           
           /* METRICS GRID */
-          .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; color: #4F46E5; letter-spacing: 0.8px; margin: 24px 0 12px; }
-          .metrics-grid { display: flex; gap: 12px; margin-bottom: 24px; }
-          .metric-card { flex: 1; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px 16px; text-align: center; }
-          .metric-value { font-size: 18px; font-weight: 800; color: #0F172A; }
-          .metric-label { font-size: 11px; color: #64748B; font-weight: 500; margin-top: 2px; }
+          .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #4F46E5; letter-spacing: 0.8px; margin: 20px 0 10px; page-break-after: avoid; break-after: avoid; }
+          .metrics-grid { display: flex; gap: 10px; margin-bottom: 20px; page-break-inside: avoid; break-inside: avoid; }
+          .metric-card { flex: 1; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px 12px; text-align: center; }
+          .metric-value { font-size: 16px; font-weight: 800; color: #0F172A; }
+          .metric-label { font-size: 10px; color: #64748B; font-weight: 500; margin-top: 2px; }
 
           /* CARDS CLIENTE / CRIADOR */
-          .party-grid { display: table; width: 100%; margin-bottom: 24px; }
+          .party-grid { display: table; width: 100%; margin-bottom: 20px; page-break-inside: avoid; break-inside: avoid; }
           .party-col { display: table-cell; width: 50%; vertical-align: top; }
-          .party-col:first-child { padding-right: 12px; }
-          .party-col:last-child { padding-left: 12px; }
-          .party-card { background: #F8FAFC; border-radius: 10px; padding: 16px; border: 1px solid #E2E8F0; }
-          .party-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #6366F1; letter-spacing: 1px; margin-bottom: 6px; }
-          .party-name { font-size: 14px; font-weight: 700; color: #0F172A; margin: 0 0 4px 0; }
-          .party-detail { font-size: 12px; color: #475569; margin: 2px 0; }
+          .party-col:first-child { padding-right: 10px; }
+          .party-col:last-child { padding-left: 10px; }
+          .party-card { background: #F8FAFC; border-radius: 8px; padding: 14px; border: 1px solid #E2E8F0; }
+          .party-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #6366F1; letter-spacing: 1px; margin-bottom: 4px; }
+          .party-name { font-size: 13px; font-weight: 700; color: #0F172A; margin: 0 0 2px 0; }
+          .party-detail { font-size: 11px; color: #475569; margin: 2px 0; }
 
           /* TABELA */
-          table.items-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; page-break-inside: avoid; }
-          table.items-table th { background: #F8FAFC; color: #475569; font-size: 11px; font-weight: 700; text-transform: uppercase; padding: 10px 14px; border-bottom: 2px solid #E2E8F0; text-align: left; }
-          table.items-table td { padding: 12px 14px; border-bottom: 1px solid #F1F5F9; color: #334155; }
+          table.items-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; page-break-inside: auto; }
+          table.items-table tr { page-break-inside: avoid; break-inside: avoid; }
+          table.items-table th { background: #F8FAFC; color: #475569; font-size: 11px; font-weight: 700; text-transform: uppercase; padding: 8px 12px; border-bottom: 2px solid #E2E8F0; text-align: left; }
+          table.items-table td { padding: 10px 12px; border-bottom: 1px solid #F1F5F9; color: #334155; }
           .deliverable-cell { width: 45%; }
           .item-title { font-weight: 600; color: #0F172A; }
           .center-cell { text-align: center; }
           .right-cell { text-align: right; }
           .bold-cell { font-weight: 700; color: #0F172A; }
 
-          /* CONDICIONS COMERCIAIS */
-          .conditions-box { background: #F1F5F9; border-radius: 10px; padding: 16px; margin-bottom: 24px; font-size: 12px; border: 1px solid #E2E8F0; }
-          .condition-item { margin-bottom: 6px; }
+          /* CONDIÇÕES COMERCIAIS */
+          .conditions-box { background: #F1F5F9; border-radius: 8px; padding: 14px; margin-bottom: 20px; font-size: 11.5px; border: 1px solid #E2E8F0; page-break-inside: avoid; break-inside: avoid; }
+          .condition-item { margin-bottom: 4px; }
           .condition-item strong { color: #0F172A; }
 
           /* TOTAL */
-          .summary-wrapper { display: flex; justify-content: flex-end; margin-bottom: 32px; page-break-inside: avoid; }
-          .summary-card { width: 280px; background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border-radius: 12px; padding: 18px 22px; color: #FFFFFF; }
+          .summary-wrapper { display: flex; justify-content: flex-end; margin-bottom: 24px; page-break-inside: avoid; break-inside: avoid; }
+          .summary-card { width: 260px; background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border-radius: 10px; padding: 16px 20px; color: #FFFFFF; }
           .summary-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #94A3B8; margin-bottom: 4px; }
-          .summary-amount { font-size: 22px; font-weight: 800; background: linear-gradient(90deg, #A5B4FC 0%, #F472B6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+          .summary-amount { font-size: 20px; font-weight: 800; background: linear-gradient(90deg, #A5B4FC 0%, #F472B6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 
           /* ASSINATURAS */
-          .signatures-grid { display: flex; justify-content: space-between; gap: 40px; margin-top: 40px; page-break-inside: avoid; }
-          .signature-line { flex: 1; border-top: 1px solid #94A3B8; text-align: center; padding-top: 8px; font-size: 11px; color: #475569; }
+          .signatures-grid { display: flex; justify-content: space-between; gap: 40px; margin-top: 30px; page-break-inside: avoid; break-inside: avoid; }
+          .signature-line { flex: 1; border-top: 1px solid #94A3B8; text-align: center; padding-top: 6px; font-size: 11px; color: #475569; }
 
-          .footer { padding-top: 20px; border-top: 1px solid #E2E8F0; text-align: center; font-size: 10px; color: #94A3B8; margin-top: 20px; }
+          .footer { padding-top: 16px; border-top: 1px solid #E2E8F0; text-align: center; font-size: 10px; color: #94A3B8; margin-top: 16px; page-break-inside: avoid; break-inside: avoid; }
         </style>
       </head>
       <body>
@@ -205,6 +209,11 @@ export class PDFService {
               </div>
             </div>
           </div>
+
+          ${proposal.description ? `
+            <div class="section-title">💡 Visão Estratégica & Proposta</div>
+            <div class="description-box">${proposal.description}</div>
+          ` : ''}
 
           ${metricsHtml}
 

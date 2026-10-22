@@ -32,7 +32,6 @@ export class ProposalController {
   // 📋 Obter IDs permitidos para listagem (Próprio utilizador + Criadores delegados se for agência)
   private static async getAllowedUserIds(user: { id: string; role: string }): Promise<string[]> {
     if (user.role === 'SUPER_ADMIN') {
-      // Se for super admin, pode ver tudo ou ajustar conforme regra. Aqui focamos em agency/creator.
       return [user.id];
     }
 
@@ -47,7 +46,7 @@ export class ProposalController {
     return [user.id];
   }
 
-  // Criar Proposta Comercial (Com suporte a Agências e Delegação)
+  // Criar Proposta Comercial (Com suporte a Agências, Delegação e Snapshot de Métricas)
   static async createProposal(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
 
@@ -86,7 +85,12 @@ export class ProposalController {
 
     const user = await prisma.user.findUnique({
       where: { id: targetUserId },
-      include: { plan: true },
+      include: { 
+        plan: true,
+        mediaKit: {
+          include: { socialNetworks: true }
+        }
+      },
     });
 
     if (!user) return res.status(404).json({ error: 'Utilizador não encontrado.' });
@@ -130,6 +134,20 @@ export class ProposalController {
 
     const totalAmount = processedItems.reduce((acc, item) => acc + item.totalPrice, 0);
 
+    // 🚀 Geração automática do Snapshot de Métricas reais do Criador (Sem inventar dados)
+    let metricsSnapshot = null;
+    if (user.mediaKit && user.mediaKit.socialNetworks.length > 0) {
+      const totalFollowers = user.mediaKit.socialNetworks.reduce((acc, net) => acc + (net.followersCount || 0), 0);
+      const totalViews = user.mediaKit.socialNetworks.reduce((acc, net) => acc + (net.monthlyViews || 0), 0);
+      const avgEngagement = user.mediaKit.socialNetworks.reduce((acc, net) => acc + (net.engagementRate || 0), 0) / user.mediaKit.socialNetworks.length;
+
+      metricsSnapshot = {
+        totalFollowers: totalFollowers > 0 ? totalFollowers.toLocaleString('pt-PT') : undefined,
+        avgViews: totalViews > 0 ? totalViews.toLocaleString('pt-PT') : undefined,
+        engagementRate: avgEngagement > 0 ? `${avgEngagement.toFixed(1)}%` : undefined,
+      };
+    }
+
     const proposal = await prisma.proposal.create({
       data: {
         userId: targetUserId,
@@ -140,6 +158,10 @@ export class ProposalController {
         currency,
         totalAmount,
         validUntil: new Date(validUntil),
+        paymentTerms: req.body.paymentTerms || '50% na aprovação e 50% após entrega final.',
+        deliveryDeadline: req.body.deliveryDeadline || 'Conforme alinhamento do briefing.',
+        revisionPolicy: req.body.revisionPolicy || 'Inclui até 2 rodadas de revisões antes da publicação.',
+        metricsSnapshot: metricsSnapshot ? JSON.parse(JSON.stringify(metricsSnapshot)) : undefined,
         items: {
           create: processedItems,
         },
@@ -259,6 +281,11 @@ export class ProposalController {
       createdAt: proposal.createdAt,
       creatorName: proposal.user.name,
       creatorEmail: proposal.user.email,
+      paymentTerms: proposal.paymentTerms,
+      deliveryDeadline: proposal.deliveryDeadline,
+      revisionPolicy: proposal.revisionPolicy,
+      cancellationTerms: proposal.cancellationTerms,
+      metricsSnapshot: proposal.metricsSnapshot as any,
       items: proposal.items,
     });
 
@@ -329,6 +356,11 @@ export class ProposalController {
         createdAt: proposal.createdAt,
         creatorName: proposal.user.name,
         creatorEmail: proposal.user.email,
+        paymentTerms: proposal.paymentTerms,
+        deliveryDeadline: proposal.deliveryDeadline,
+        revisionPolicy: proposal.revisionPolicy,
+        cancellationTerms: proposal.cancellationTerms,
+        metricsSnapshot: proposal.metricsSnapshot as any,
         items: proposal.items.map((item) => ({
           deliverable: item.deliverable,
           quantity: item.quantity,
@@ -440,6 +472,11 @@ export class ProposalController {
         createdAt: proposal.createdAt,
         creatorName: proposal.user.name,
         creatorEmail: proposal.user.email,
+        paymentTerms: proposal.paymentTerms,
+        deliveryDeadline: proposal.deliveryDeadline,
+        revisionPolicy: proposal.revisionPolicy,
+        cancellationTerms: proposal.cancellationTerms,
+        metricsSnapshot: proposal.metricsSnapshot as any,
         items: proposal.items.map((item) => ({
           deliverable: item.deliverable,
           quantity: item.quantity,
