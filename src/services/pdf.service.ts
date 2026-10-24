@@ -83,6 +83,20 @@ export class PDFService {
     const isVerified = proposal.metricsSnapshot?.isVerified ?? true;
     const periodText = proposal.metricsSnapshot?.analysisPeriod || 'Últimos 30 dias';
 
+    const networksListHtml = proposal.metricsSnapshot?.networksList && proposal.metricsSnapshot.networksList.length > 0
+      ? `
+        <div class="networks-breakdown" style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
+          ${proposal.metricsSnapshot.networksList.map(net => `
+            <div class="network-badge" style="flex: 1; min-width: 100px; background: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 4px; padding: 4px 6px; text-align: center;">
+              <div style="font-size: 8.5px; font-weight: 700; color: #4F46E5; text-transform: uppercase;">${net.platform}</div>
+              <div style="font-size: 11px; font-weight: 800; color: #0F172A; margin-top: 1px;">${Number(net.followers || 0).toLocaleString('pt-PT')} <span style="font-size: 8px; font-weight: normal; color: #64748B;">seguidores</span></div>
+              ${net.handle ? `<div style="font-size: 7.5px; color: #64748B;">${net.handle}</div>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      `
+      : '';
+
     const metricsHtml = proposal.metricsSnapshot ? `
       <div class="section-title">📊 Desempenho das Redes Sociais (${isVerified ? 'Métricas Verificadas por API' : 'Métricas Declaradas'})</div>
       <div class="metrics-grid">
@@ -105,6 +119,7 @@ export class PDFService {
           </div>
         ` : ''}
       </div>
+      ${networksListHtml}
       <div class="metrics-footnote">
         * Período analisado: ${periodText}. Métricas somadas entre plataformas ativas do criador.
       </div>
@@ -135,18 +150,15 @@ export class PDFService {
           .valid-until { color: #E11D48; font-weight: 600; }
           .doc-title { font-size: 16px; font-weight: 800; color: #0F172A; margin: 0 0 10px 0; letter-spacing: -0.3px; page-break-inside: avoid; }
           
-          /* DESCRIÇÃO / VISÃO ESTRATÉGICA */
           .description-box { background: #F8FAFC; border-left: 3px solid #6366F1; padding: 8px 10px; border-radius: 0 5px 5px 0; margin-bottom: 12px; font-size: 10.5px; color: #334155; line-height: 1.45; white-space: pre-line; page-break-inside: avoid; }
           
-          /* METRICS GRID */
           .section-title { font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: #4F46E5; letter-spacing: 0.6px; margin: 12px 0 6px; page-break-after: avoid; }
           .metrics-grid { display: flex; gap: 6px; margin-bottom: 4px; page-break-inside: avoid; }
           .metric-card { flex: 1; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 5px; padding: 6px 8px; text-align: center; }
           .metric-value { font-size: 13px; font-weight: 800; color: #0F172A; }
           .metric-label { font-size: 9px; color: #64748B; font-weight: 500; margin-top: 1px; }
-          .metrics-footnote { font-size: 8.5px; color: #94A3B8; margin-bottom: 12px; font-style: italic; }
+          .metrics-footnote { font-size: 8.5px; color: #94A3B8; margin-top: 4px; margin-bottom: 12px; font-style: italic; }
 
-          /* CARDS CLIENTE / CRIADOR */
           .party-grid { display: table; width: 100%; margin-bottom: 12px; page-break-inside: avoid; }
           .party-col { display: table-cell; width: 50%; vertical-align: top; }
           .party-col:first-child { padding-right: 6px; }
@@ -156,7 +168,6 @@ export class PDFService {
           .party-name { font-size: 11px; font-weight: 700; color: #0F172A; margin: 0 0 1px 0; }
           .party-detail { font-size: 9.5px; color: #475569; margin: 1px 0; }
 
-          /* TABELA */
           table.items-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; page-break-inside: auto; }
           table.items-table tr { page-break-inside: avoid; }
           table.items-table th { background: #F8FAFC; color: #475569; font-size: 9.5px; font-weight: 700; text-transform: uppercase; padding: 5px 8px; border-bottom: 2px solid #E2E8F0; text-align: left; }
@@ -167,7 +178,6 @@ export class PDFService {
           .right-cell { text-align: right; }
           .bold-cell { font-weight: 700; color: #0F172A; }
 
-          /* CONDIÇÕES COMERCIAIS E TOTAL COMPACTOS */
           .bottom-flex { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; page-break-inside: avoid; }
           .conditions-box { flex: 1; background: #F1F5F9; border-radius: 5px; padding: 8px 10px; font-size: 9.5px; border: 1px solid #E2E8F0; }
           .condition-item { margin-bottom: 2px; }
@@ -177,7 +187,6 @@ export class PDFService {
           .summary-label { font-size: 8.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: #94A3B8; margin-bottom: 2px; }
           .summary-amount { font-size: 16px; font-weight: 800; background: linear-gradient(90deg, #A5B4FC 0%, #F472B6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 
-          /* ASSINATURAS */
           .signatures-grid { display: flex; justify-content: space-between; gap: 24px; margin-top: 16px; page-break-inside: avoid; }
           .signature-line { flex: 1; border-top: 1px solid #94A3B8; text-align: center; padding-top: 4px; font-size: 9.5px; color: #475569; }
           .sig-date { font-size: 8.5px; color: #94A3B8; margin-top: 2px; }
