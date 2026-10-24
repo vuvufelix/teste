@@ -9,12 +9,15 @@ import { NotificationService } from '../services/notification.service.js';
 
 export class ProposalController {
   
-  // 🔒 Helper privado para verificar se a agência tem acesso ao criador da proposta ou se é o próprio utilizador
+  // 🔒 Helper privado para verificar se o utilizador tem acesso à proposta
   private static async verifyProposalAccess(userId: string, userRole: string, proposalUserId: string) {
     if (userId === proposalUserId) return true;
     if (userRole === 'SUPER_ADMIN') return true;
     
     if (userRole === 'AGENCY') {
+      // Se a proposta foi criada pela própria agência ou se é de um criador delegado
+      if (proposalUserId === userId) return true;
+
       const delegation = await prisma.agencyDelegation.findUnique({
         where: {
           agencyId_creatorId: {
@@ -29,36 +32,21 @@ export class ProposalController {
     return false;
   }
 
-  // 📋 Obter IDs permitidos para listagem com suporte a filtro opcional por criador
+  // 📋 Obter IDs permitidos para listagem no painel
   private static async getAllowedUserIds(user: { id: string; role: string }, queryParams?: { creatorId?: string }): Promise<string[]> {
     if (user.role === 'SUPER_ADMIN') {
       return [user.id];
     }
 
     if (user.role === 'AGENCY') {
-      // Se a agência passou um criador específico na query, validamos a delegação
-      if (queryParams?.creatorId) {
-        const delegation = await prisma.agencyDelegation.findUnique({
-          where: {
-            agencyId_creatorId: {
-              agencyId: user.id,
-              creatorId: queryParams.creatorId,
-            },
-          },
-        });
-        if (delegation && delegation.status === 'ACCEPTED') {
-          return [queryParams.creatorId];
-        }
-      }
-
-      // Por defeito, a agência vê APENAS as suas próprias propostas no painel principal
+      // A agência vê as propostas criadas por ela própria (userId = agency.id)
       return [user.id];
     }
 
     return [user.id];
   }
 
-  // Criar Proposta Comercial (Com suporte a Agências, Delegação e Snapshot de Métricas Contextualizadas)
+  // Criar Proposta Comercial
   static async createProposal(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
 
@@ -107,9 +95,16 @@ export class ProposalController {
 
     if (!user) return res.status(404).json({ error: 'Utilizador não encontrado.' });
 
-    const isSuperAdmin = user.role === 'SUPER_ADMIN';
-    const isTrialing = user.subscriptionStatus === 'TRIALING';
-    const isActive = user.subscriptionStatus === 'ACTIVE';
+    // Se quem está logado é uma agência, verificamos o plano e limites na conta da agência (req.user.id)
+    const authorUser = req.user.role === 'AGENCY' 
+      ? await prisma.user.findUnique({ where: { id: req.user.id }, include: { plan: true } }) 
+      : user;
+
+    if (!authorUser) return res.status(404).json({ error: 'Autor não encontrado.' });
+
+    const isSuperAdmin = authorUser.role === 'SUPER_ADMIN';
+    const isTrialing = authorUser.subscriptionStatus === 'TRIALING';
+    const isActive = authorUser.subscriptionStatus === 'ACTIVE';
 
     if (!isActive && !isTrialing && !isSuperAdmin) {
       return res.status(403).json({
@@ -118,20 +113,20 @@ export class ProposalController {
       });
     }
 
-    if (!isTrialing && !isSuperAdmin && user.plan && user.plan.maxProposalsPerMonth !== -1) {
+    if (!isTrialing && !isSuperAdmin && authorUser.plan && authorUser.plan.maxProposalsPerMonth !== -1) {
       const now = new Date();
       const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
       const proposalsCount = await prisma.proposal.count({
         where: {
-          userId: targetUserId,
+          userId: req.user.id, // Conta as propostas criadas pela agência
           createdAt: { gte: firstDayOfMonth },
         },
       });
 
-      if (proposalsCount >= user.plan.maxProposalsPerMonth) {
+      if (proposalsCount >= authorUser.plan.maxProposalsPerMonth) {
         return res.status(403).json({
-          error: `O plano atual permite gerar no máximo ${user.plan.maxProposalsPerMonth} propostas por mês. Faça upgrade do seu plano para propostas ilimitadas.`,
+          error: `O plano atual permite gerar no máximo ${authorUser.plan.maxProposalsPerMonth} propostas por mês. Faça upgrade do seu plano para propostas ilimitadas.`,
           code: 'PROPOSAL_LIMIT_REACHED',
         });
       }
@@ -147,14 +142,12 @@ export class ProposalController {
     const totalAmount = processedItems.reduce((acc, item) => acc + item.totalPrice, 0);
 
     // 🚀 Snapshot Rígido e Contextualizado das Métricas
-    // 🚀 Snapshot Rígido e Contextualizado das Métricas (Com suporte a agregação para Agências)
     let metricsSnapshot = null;
     let networksToProcess = user.mediaKit?.socialNetworks || [];
 
-    // Se for agência e não tiver redes próprias, agrega as redes de todos os criadores com delegação ACEPTE
-    if (user.role === 'AGENCY' && networksToProcess.length === 0) {
+    if (req.user.role === 'AGENCY' && !requestedCreatorId && networksToProcess.length === 0) {
       const delegations = await prisma.agencyDelegation.findMany({
-        where: { agencyId: user.id, status: 'ACCEPTED' },
+        where: { agencyId: req.user.id, status: 'ACCEPTED' },
         include: {
           creator: {
             include: {
@@ -181,7 +174,7 @@ export class ProposalController {
         engagementRate: avgEngagement > 0 ? `${avgEngagement.toFixed(1)}%` : undefined,
         networksCount: networksToProcess.length,
         isVerified: hasVerifiedApiData,
-        analysisPeriod: user.role === 'AGENCY' && !user.mediaKit?.socialNetworks?.length ? 'Últimos 30 dias (Rede Consolidada da Agência)' : 'Últimos 30 dias',
+        analysisPeriod: 'Últimos 30 dias',
         networksList: networksToProcess.map((net: any) => ({
           platform: net.platform,
           handle: net.handle || undefined,
@@ -190,9 +183,12 @@ export class ProposalController {
       };
     }
 
+    // 🚀 Se for agência a emitir em nome de um criador, a proposta pertence à agência, mas guardamos o nome do criador no PDF
+    const proposalOwnerId = req.user.role === 'AGENCY' ? req.user.id : targetUserId;
+
     const proposal = await prisma.proposal.create({
       data: {
-        userId: targetUserId,
+        userId: proposalOwnerId, // 👈 Agora fica sempre no painel da agência (ou do criador se for criador direto)
         brandName,
         brandEmail,
         title,
@@ -214,7 +210,6 @@ export class ProposalController {
     return res.status(201).json({ proposal });
   }
 
-  // Listar todas as propostas com base nas permissões e filtros
   static async getMyProposals(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
 
@@ -224,7 +219,7 @@ export class ProposalController {
       where: { userId: { in: allowedUserIds } },
       include: { 
         items: true,
-        user: { select: { name: true, email: true } } // Útil para identificar o autor caso necessário
+        user: { select: { name: true, email: true } }
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -232,7 +227,6 @@ export class ProposalController {
     return res.status(200).json({ proposals });
   }
 
-  // Obter detalhes de uma proposta específica
   static async getProposalById(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
     const { id } = req.params;
@@ -254,7 +248,6 @@ export class ProposalController {
     return res.status(200).json({ proposal });
   }
 
-  // Atualizar Status da Proposta
   static async updateStatus(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
     const { id } = req.params;
@@ -283,16 +276,9 @@ export class ProposalController {
       include: { items: true },
     });
 
-    await NotificationService.sendPushToUser(proposal.userId, {
-      title: 'Status de Proposta Atualizado! 📄',
-      body: `A proposta para "${proposal.brandName}" mudou para ${updatedProposal.status}.`,
-      url: `/proposals/${proposal.id}`,
-    });
-
     return res.status(200).json({ proposal: updatedProposal });
   }
 
-  // Renderizar PDF/HTML da Proposta Comercial
   static async renderProposalPDF(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
     const { id } = req.params;
@@ -338,7 +324,6 @@ export class ProposalController {
     return res.status(200).send(htmlContent);
   }
 
-  // Excluir Proposta
   static async deleteProposal(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
     const { id } = req.params;
@@ -361,7 +346,6 @@ export class ProposalController {
     return res.status(200).json({ message: 'Proposta comercial excluída com sucesso.' });
   }
 
-  // Gera e faz o download direto do PDF da Proposta Comercial
   static async downloadProposalPDF(req: AuthenticatedRequest, res: Response) {
     try {
       if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
@@ -371,12 +355,7 @@ export class ProposalController {
         where: { id },
         include: {
           items: true,
-          user: {
-            select: {
-              name: true,
-              email: true,
-            },
-          },
+          user: { select: { name: true, email: true } },
         },
       });
 
@@ -428,7 +407,6 @@ export class ProposalController {
     }
   }
 
-  // Gerar texto da proposta com IA (Gemini)
   static async generateAIProposalText(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
 
@@ -439,10 +417,7 @@ export class ProposalController {
 
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      include: { 
-        plan: true, 
-        mediaKit: true 
-      },
+      include: { plan: true, mediaKit: true },
     });
 
     if (!user) return res.status(404).json({ error: 'Utilizador não encontrado.' });
@@ -477,7 +452,6 @@ export class ProposalController {
     }
   }
 
-  // Envia a proposta comercial em PDF por e-mail para a marca
   static async sendProposalEmail(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
     const { id } = req.params;
