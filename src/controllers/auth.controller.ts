@@ -217,6 +217,53 @@ export class AuthController {
     return res.status(200).json({ user });
   }
 
+  // Novo método para atualizar o perfil (Nome e E-mail)
+  static async updateProfile(req: AuthenticatedRequest, res: Response) {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Não autenticado.' });
+    }
+
+    const { name, email } = req.body;
+
+    if (!name && !email) {
+      return res.status(400).json({ error: 'Forneça ao menos o nome ou o e-mail para atualizar.' });
+    }
+
+    try {
+      // Se o utilizador estiver a tentar alterar o e-mail, verificar se já existe outro utilizador com esse e-mail
+      if (email) {
+        const existingUser = await prisma.user.findUnique({ where: { email } });
+        if (existingUser && existingUser.id !== req.user.id) {
+          return res.status(409).json({ error: 'Este e-mail já está a ser utilizado por outra conta.' });
+        }
+      }
+
+      const updatedUser = await prisma.user.update({
+        where: { id: req.user.id },
+        data: {
+          ...(name && { name }),
+          ...(email && { email }),
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          subscriptionStatus: true,
+          trialEndsAt: true,
+        },
+      });
+
+      return res.status(200).json({
+        message: 'Perfil atualizado com sucesso!',
+        user: updatedUser,
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar perfil:', error);
+      return res.status(500).json({ error: 'Erro interno ao atualizar o perfil.' });
+    }
+  }
+
   // 1. Solicitar redefinição de senha (envia o e-mail)
   static async forgotPassword(req: Request, res: Response) {
     const parseResult = forgotPasswordSchema.safeParse(req.body);
