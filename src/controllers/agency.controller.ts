@@ -3,6 +3,7 @@ import { prisma } from '../config/prisma.js';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
 import { NotificationService } from '../services/notification.service.js';
 import { CloudinaryService } from '../services/cloudinary.service.js';
+import { PlanEntitlementService } from '../services/plan-entitlement.service.js';
 
 export class AgencyController {
   // 1. Agência envia um convite de delegação para o criador através do e-mail
@@ -16,33 +17,25 @@ export class AgencyController {
       return res.status(400).json({ error: 'Informe o e-mail do criador.' });
     }
 
-    // Busca os dados da agência, incluindo o plano e o status da subscrição
-    const agencyUser = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      include: { plan: true },
+    // 🔒 Verificação centralizada de permissões e limites do plano da agência
+    const entitlement = await PlanEntitlementService.getUserEntitlements(req.user.id);
+    if (!entitlement.authorized) {
+      return res.status(entitlement.status || 403).json({ error: entitlement.error });
+    }
+
+    // Validar limite maxCreators permitido pelo plano atual da agência (Contabiliza ativos e pendentes)
+    const maxCreators = entitlement.limits!.maxCreators;
+    const activeOrPendingCount = await prisma.agencyDelegation.count({
+      where: {
+        agencyId: req.user.id,
+        status: { in: ['ACCEPTED', 'PENDING'] },
+      },
     });
 
-    if (!agencyUser) {
-      return res.status(404).json({ error: 'Utilizador agência não encontrado.' });
-    }
-
-    const isSuperAdmin = agencyUser.role === 'SUPER_ADMIN';
-    const isTrialing = agencyUser.subscriptionStatus === 'TRIALING';
-    const isActive = agencyUser.subscriptionStatus === 'ACTIVE';
-
-    // 🔒 Verificação de Assinatura da Agência
-    if (!isActive && !isTrialing && !isSuperAdmin) {
+    if (activeOrPendingCount >= maxCreators) {
       return res.status(403).json({
-        error: 'A sua assinatura de agência está inativa ou expirou. Assine o Plano Agência para gerir criadores.',
-        code: 'SUBSCRIPTION_INACTIVE',
-      });
-    }
-
-    // 📏 Validação de Plano: Garante que a agência está no Plano Agência (slug: 'agency') ou em Trial/Admin
-    if (!isSuperAdmin && !isTrialing && agencyUser.plan?.slug !== 'agency') {
-      return res.status(403).json({
-        error: 'O seu plano atual não permite a gestão de múltiplos criadores. Faça upgrade para o Plano Agência.',
-        code: 'AGENCY_PLAN_REQUIRED',
+        error: `Atingiu o limite máximo de ${maxCreators} criadores (ativos ou pendentes) permitidos no seu plano comercial atual.`,
+        code: 'CREATOR_LIMIT_EXCEEDED',
       });
     }
 
@@ -76,12 +69,6 @@ export class AgencyController {
       },
     });
 
-    await NotificationService.sendPushToUser(creator.id, {
-      title: 'Novo Convite de Agência! 🚀',
-      body: `${agencyUser.name} convidou-o para gerir a sua conta.`,
-      url: '/dashboard/invites',
-    });
-
     return res.status(201).json({
       message: 'Convite enviado com sucesso ao criador!',
       delegation,
@@ -112,7 +99,6 @@ export class AgencyController {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Formata para injetar a profilePicture da agência de forma limpa
     const invites = delegations.map((d: any) => ({
       id: d.id,
       status: d.status,
@@ -186,12 +172,12 @@ export class AgencyController {
     return res.status(200).json({ message: 'Convite cancelado e removido com sucesso.' });
   }
 
-  // 5. Criador aceita ou recusa o convite da agência
+  // 5. Criador aceita ou recusa o convite da agência (Com validação segura de limite maxCreators)
   static async respondToInvite(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
     
     const { delegationId } = req.params;
-    const { status } = req.body; // Esperado: 'ACCEPTED' ou 'REVOKED' (ou REJECTED)
+    const { status } = req.body; // 'ACCEPTED' ou 'REVOKED' / 'REJECTED'
 
     if (!['ACCEPTED', 'REVOKED', 'REJECTED'].includes(status)) {
       return res.status(400).json({ error: 'Status inválido. Use ACCEPTED ou REVOKED.' });
@@ -205,6 +191,29 @@ export class AgencyController {
 
     if (!delegation || delegation.creatorId !== req.user.id) {
       return res.status(404).json({ error: 'Convite não encontrado.' });
+    }
+
+    // Se o criador estiver a aceitar, verificamos rigorosamente se a agência ainda tem vaga (maxCreators)
+    if (normalizedStatus === 'ACCEPTED') {
+      const entitlement = await PlanEntitlementService.getUserEntitlements(delegation.agencyId);
+      if (!entitlement.authorized) {
+        return res.status(403).json({ error: 'A agência associada não possui um plano ativo válido.' });
+      }
+
+      const maxCreators = entitlement.limits!.maxCreators;
+      const activeCount = await prisma.agencyDelegation.count({
+        where: {
+          agencyId: delegation.agencyId,
+          status: 'ACCEPTED',
+        },
+      });
+
+      if (activeCount >= maxCreators) {
+        return res.status(403).json({
+          error: `A agência atingiu o limite máximo de ${maxCreators} criadores geridos permitidos no plano atual.`,
+          code: 'CREATOR_LIMIT_EXCEEDED',
+        });
+      }
     }
 
     const updatedDelegation = await prisma.agencyDelegation.update({
@@ -224,7 +233,7 @@ export class AgencyController {
     });
   }
 
-  // 6. Agência lista todos os criadores com delegação ativa (ACCEPTED) com foto do Media Kit
+  // 6. Agência lista todos os criadores com delegação ativa (ACCEPTED)
   static async getMyManagedCreators(req: AuthenticatedRequest, res: Response) {
     if (!req.user || req.user.role !== 'AGENCY') {
       return res.status(403).json({ error: 'Acesso negado. Apenas agências podem consultar esta lista.' });
@@ -316,7 +325,7 @@ export class AgencyController {
   static async leaveAgency(req: AuthenticatedRequest, res: Response) {
     if (!req.user) return res.status(401).json({ error: 'Não autenticado.' });
 
-    const { agencyId } = req.body; // Opcional se houver mais do que uma agência
+    const { agencyId } = req.body;
 
     const whereClause: any = { creatorId: req.user.id, status: 'ACCEPTED' };
     if (agencyId) whereClause.agencyId = agencyId;
@@ -386,12 +395,10 @@ export class AgencyController {
 
     let imageUrl = profilePicture;
 
-    // 🎯 Solução: Se a foto vier em Base64, fazemos o upload para o Cloudinary primeiro!
     if (profilePicture && profilePicture.startsWith('data:image')) {
       imageUrl = await CloudinaryService.uploadImage(profilePicture, 'profile');
     }
 
-    // Upsert no MediaKit da agência guardando o URL seguro do Cloudinary
     const mediaKit = await prisma.mediaKit.upsert({
       where: { userId: req.user.id },
       update: {
@@ -423,54 +430,98 @@ export class AgencyController {
     });
   }
 
-  // 11. Agência pesquisa influenciadores disponíveis na plataforma
+  // 11. Diretório Avançado de Influenciadores (Fase 6.1: Nome, Nicho, Localização, Plataforma, Seguidores e Paginação)
   static async searchInfluencers(req: AuthenticatedRequest, res: Response) {
     if (!req.user || req.user.role !== 'AGENCY') {
       return res.status(403).json({ error: 'Acesso negado.' });
     }
 
-    const { query } = req.query;
-    const searchTerm = (query as string) || '';
+    const { name, niche, location, platform, minFollowers, maxFollowers, page = '1', limit = '10' } = req.query;
 
-    const influencers = await prisma.user.findMany({
-      where: {
+    const pageNum = parseInt(page as string, 10) || 1;
+    const limitNum = parseInt(limit as string, 10) || 10;
+    const skip = (pageNum - 1) * limitNum;
+
+    try {
+      const whereClause: any = {
         role: 'INFLUENCER',
-        OR: [
-          { name: { contains: searchTerm } },
-          { email: { contains: searchTerm } },
-        ],
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        subscriptionStatus: true,
-        mediaKit: {
-          select: {
-            slug: true,
-            profilePicture: true,
-            bio: true,
-            niche: true,
-            location: true,
+      };
+
+      if (name) {
+        whereClause.name = { contains: name as string };
+      }
+
+      if (location || niche || platform || minFollowers || maxFollowers) {
+        whereClause.mediaKit = {
+          is: {
+            ...(location ? { location: { contains: location as string } } : {}),
+            ...(niche ? { niche: { contains: niche as string } } : {}),
+            ...(platform || minFollowers || maxFollowers ? {
+              socialNetworks: {
+                some: {
+                  ...(platform ? { platform: platform as string } : {}),
+                  ...(minFollowers || maxFollowers ? {
+                    followersCount: {
+                      ...(minFollowers ? { gte: parseInt(minFollowers as string, 10) } : {}),
+                      ...(maxFollowers ? { lte: parseInt(maxFollowers as string, 10) } : {}),
+                    }
+                  } : {}),
+                }
+              }
+            } : {}),
           },
+        };
+      }
+
+      const [influencers, total] = await Promise.all([
+        prisma.user.findMany({
+          where: whereClause,
+          select: {
+            id: true,
+            name: true,
+            subscriptionStatus: true,
+            mediaKit: {
+              select: {
+                slug: true,
+                profilePicture: true,
+                bio: true,
+                niche: true,
+                location: true,
+                socialNetworks: true,
+              },
+            },
+          },
+          skip,
+          take: limitNum,
+        }),
+        prisma.user.count({ where: whereClause }),
+      ]);
+
+      const formattedInfluencers = influencers.map((inf: any) => ({
+        id: inf.id,
+        name: inf.name,
+        subscriptionStatus: inf.subscriptionStatus,
+        profilePicture: inf.mediaKit?.profilePicture || null,
+        mediaKitSlug: inf.mediaKit?.slug || null,
+        bio: inf.mediaKit?.bio || null,
+        niche: inf.mediaKit?.niche || null,
+        location: inf.mediaKit?.location || null,
+        socialNetworks: inf.mediaKit?.socialNetworks || [],
+      }));
+
+      return res.status(200).json({
+        data: formattedInfluencers,
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(total / limitNum),
         },
-      },
-      take: 20,
-    });
-
-    const formattedInfluencers = influencers.map((inf: any) => ({
-      id: inf.id,
-      name: inf.name,
-      email: inf.email,
-      subscriptionStatus: inf.subscriptionStatus,
-      profilePicture: inf.mediaKit?.profilePicture || null,
-      mediaKitSlug: inf.mediaKit?.slug || null,
-      bio: inf.mediaKit?.bio || null,
-      niche: inf.mediaKit?.niche || null,
-      location: inf.mediaKit?.location || null,
-    }));
-
-    return res.status(200).json({ influencers: formattedInfluencers });
+      });
+    } catch (error) {
+      console.error('Erro ao pesquisar influenciadores:', error);
+      return res.status(500).json({ error: 'Erro interno ao pesquisar influenciadores.' });
+    }
   }
 
   // 12. Agência visualiza o Mídia Kit detalhado de um influenciador específico

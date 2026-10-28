@@ -1,92 +1,124 @@
-import { PrismaClient, Role } from '@prisma/client';
+import { PrismaClient, Role, PlanAudience } from '@prisma/client';
 import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Populando o banco de dados com os Planos do SaaS...');
+  console.log('🌱 A popular o banco de dados com os 6 planos comerciais do Influkit...');
 
-  // 1. Plano Inicial (Basic) - SEM IA
-  await prisma.plan.upsert({
-    where: { slug: 'basic' },
-    update: {
-      name: 'Plano Inicial',
-      priceUSD: 12.00,
-      priceAOA: 11000.00,
-      priceBRL: 60.00,
+  const plans = [
+    // --- INFLUENCIADORES ---
+    {
+      name: 'Influenciador Gratuito',
+      slug: 'influencer-free',
+      audience: PlanAudience.INFLUENCER,
+      priceUSD: 0,
+      priceAOA: 0,
+      priceEUR: 0,
+      durationInDays: 30,
       maxSocialNetworks: 1,
-      maxProposalsPerMonth: 5,
-      customDomainAllowed: false,
-      hasAIAssistant: false, // ❌ Sem acesso à IA
-    },
-    create: {
-      name: 'Plano Inicial',
-      slug: 'basic',
-      priceUSD: 12.00,
-      priceAOA: 11000.00,
-      priceBRL: 60.00,
-      maxSocialNetworks: 1,
-      maxProposalsPerMonth: 5,
-      customDomainAllowed: false,
+      maxProposalsPerMonth: 2,
+      maxCreators: 1,
       hasAIAssistant: false,
+      customDomainAllowed: false,
+      customizationLevel: 'BASIC',
+      isActive: true,
     },
-  });
-
-  // 2. Plano Profissional (Pro) - COM IA
-  await prisma.plan.upsert({
-    where: { slug: 'pro' },
-    update: {
-      name: 'Plano Profissional',
-      priceUSD: 30.00,
-      priceAOA: 28000.00,
-      priceBRL: 150.00,
+    {
+      name: 'Influenciador Inicial',
+      slug: 'influencer-basic',
+      audience: PlanAudience.INFLUENCER,
+      priceUSD: 5.00,
+      priceAOA: 3500.00,
+      priceEUR: 5.00,
+      durationInDays: 30,
+      maxSocialNetworks: 2,
+      maxProposalsPerMonth: 10,
+      maxCreators: 1,
+      hasAIAssistant: false,
+      customDomainAllowed: false,
+      customizationLevel: 'INTERMEDIATE',
+      isActive: true,
+    },
+    {
+      name: 'Influenciador Profissional',
+      slug: 'influencer-pro',
+      audience: PlanAudience.INFLUENCER,
+      priceUSD: 12.00,
+      priceAOA: 9000.00,
+      priceEUR: 11.00,
+      durationInDays: 30,
       maxSocialNetworks: 5,
-      maxProposalsPerMonth: -1,
+      maxProposalsPerMonth: -1, // Ilimitado
+      maxCreators: 1,
+      hasAIAssistant: true,
       customDomainAllowed: true,
-      hasAIAssistant: true, // ✅ Com acesso à IA
+      customizationLevel: 'ADVANCED',
+      isActive: true,
     },
-    create: {
-      name: 'Plano Profissional',
-      slug: 'pro',
-      priceUSD: 30.00,
-      priceAOA: 28000.00,
-      priceBRL: 150.00,
+
+    // --- AGÊNCIAS ---
+    {
+      name: 'Agência Gratuita',
+      slug: 'agency-free',
+      audience: PlanAudience.AGENCY,
+      priceUSD: 0,
+      priceAOA: 0,
+      priceEUR: 0,
+      durationInDays: 30,
       maxSocialNetworks: 5,
-      maxProposalsPerMonth: -1,
-      customDomainAllowed: true,
+      maxProposalsPerMonth: 3,
+      maxCreators: 1,
+      hasAIAssistant: false,
+      customDomainAllowed: false,
+      customizationLevel: 'BASIC',
+      isActive: true,
+    },
+    {
+      name: 'Agência Inicial',
+      slug: 'agency-basic',
+      audience: PlanAudience.AGENCY,
+      priceUSD: 15.00,
+      priceAOA: 10000.00,
+      priceEUR: 14.00,
+      durationInDays: 30,
+      maxSocialNetworks: 10,
+      maxProposalsPerMonth: 20,
+      maxCreators: 3,
+      hasAIAssistant: false,
+      customDomainAllowed: false,
+      customizationLevel: 'INTERMEDIATE',
+      isActive: true,
+    },
+    {
+      name: 'Agência Profissional',
+      slug: 'agency-pro',
+      audience: PlanAudience.AGENCY,
+      priceUSD: 35.00,
+      priceAOA: 25000.00,
+      priceEUR: 32.00,
+      durationInDays: 30,
+      maxSocialNetworks: 20,
+      maxProposalsPerMonth: -1, // Ilimitado
+      maxCreators: 10,
       hasAIAssistant: true,
-    },
-  });
-
-  // 3. Plano Agência (Agency) - COM IA
-  await prisma.plan.upsert({
-    where: { slug: 'agency' },
-    update: {
-      name: 'Plano Agência',
-      priceUSD: 80.00,
-      priceAOA: 75000.00,
-      priceBRL: 400.00,
-      maxSocialNetworks: -1,
-      maxProposalsPerMonth: -1,
       customDomainAllowed: true,
-      hasAIAssistant: true, // ✅ Com acesso à IA
+      customizationLevel: 'ADVANCED',
+      isActive: true,
     },
-    create: {
-      name: 'Plano Agência',
-      slug: 'agency',
-      priceUSD: 80.00,
-      priceAOA: 75000.00,
-      priceBRL: 400.00,
-      maxSocialNetworks: -1,
-      maxProposalsPerMonth: -1,
-      customDomainAllowed: true,
-      hasAIAssistant: true,
-    },
-  });
+  ];
 
-  console.log('✅ Planos inseridos/atualizados com sucesso!');
+  for (const planData of plans) {
+    await prisma.plan.upsert({
+      where: { slug: planData.slug },
+      update: planData,
+      create: planData,
+    });
+  }
 
-  // 4. Criação / Atualização do Super Admin
+  console.log('✅ 6 planos comerciais inseridos/atualizados com sucesso!');
+
+  // Criação / Atualização do Super Admin
   const adminEmail = 'vuvufelix2018@gmail.com';
   const defaultPassword = await bcrypt.hash('magrelo123', 10);
 

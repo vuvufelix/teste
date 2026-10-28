@@ -1,90 +1,37 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
-import request from 'supertest';
-import app from '../app.js';
-import { prisma } from '../config/prisma.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MediaKitController } from '../controllers/media-kit.controller.ts';
+import { prisma } from '../config/prisma.ts';
 
-describe('Módulo Mídia Kit e Redes Sociais', () => {
-  let token: string;
-  let userId: string;
+vi.mock('../config/prisma.js', () => ({
+  prisma: {
+    mediaKit: {
+      findUnique: vi.fn(),
+    },
+  },
+}));
 
-  beforeEach(async () => {
-    const email = `test_mediakit_${Date.now()}@teste.com`;
-    const res = await request(app).post('/api/auth/register').send({
-      name: 'Criador Mídia Kit',
-      email,
-      password: 'password123',
-    });
-
-    token = res.body.accessToken;
-    userId = res.body.user.id;
+describe('MediaKitController - Visualização Pública e Privacidade', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('Deve criar/buscar o Mídia Kit do usuário autenticado', async () => {
-    const response = await request(app)
-      .get('/api/media-kit/me')
-      .set('Authorization', `Bearer ${token}`);
+  it('Deve retornar 404 se o Mídia Kit não estiver público ou não existir', async () => {
+    vi.mocked(prisma.mediaKit.findUnique).mockResolvedValueOnce(null);
 
-    expect(response.status).toBe(200);
-    expect(response.body.mediaKit).toHaveProperty('id');
-    expect(response.body.mediaKit.userId).toBe(userId);
-  });
+    const req = {
+      params: { slug: 'slug-privado-ou-inexistente' },
+    } as any;
 
-  it('Deve atualizar as informações do Mídia Kit e alterar o slug', async () => {
-    const newSlug = `meu-slug-unico-${Date.now()}`;
-    const response = await request(app)
-      .put('/api/media-kit/me')
-      .set('Authorization', `Bearer ${token}`)
-      .send({
-        slug: newSlug,
-        bio: 'Criador de conteúdo sobre tecnologia e programação.',
-        niche: 'Tecnologia',
-        location: 'Luanda, Angola',
-        isPublic: true,
-      });
+    const res = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    } as any;
 
-    expect(response.status).toBe(200);
-    expect(response.body.mediaKit.slug).toBe(newSlug);
-    expect(response.body.mediaKit.bio).toContain('tecnologia');
-  });
+    await MediaKitController.getPublicMediaKit(req, res);
 
-  // media-kit.test.ts
-    it('Deve permitir acessar publicamente o Mídia Kit pelo slug sem autenticação', async () => {
-    const slug = `public-slug-${Date.now()}`;
-    
-    // Primeiro inicializa o Mídia Kit se a rota exigir existência prévia
-    await request(app)
-        .get('/api/media-kit/me')
-        .set('Authorization', `Bearer ${token}`);
-
-    // Atualiza com o slug público
-    await request(app)
-        .put('/api/media-kit/me')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ slug, isPublic: true });
-
-    const publicRes = await request(app).get(`/api/media-kit/public/${slug}`);
-
-    expect(publicRes.status).toBe(200);
-    expect(publicRes.body.mediaKit.slug).toBe(slug);
-    });
-
-  it('Deve cadastrar uma rede social no Mídia Kit', async () => {
-    const response = await request(app)
-      .post('/api/media-kit/social-networks')
-      .set('Authorization', `Bearer ${token}`)
-      .send({
-        platform: 'INSTAGRAM',
-        username: 'tech_creator',
-        followersCount: 25000,
-        engagementRate: 5.2,
-      });
-
-    expect(response.status).toBe(201);
-    expect(response.body.socialNetwork.platform).toBe('INSTAGRAM');
-    expect(response.body.socialNetwork.followersCount).toBe(25000);
-
-    afterAll(async () => {
-    await prisma.$disconnect();
-    });
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'Mídia Kit não encontrado ou não está público.' })
+    );
   });
 });

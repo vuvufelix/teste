@@ -5,16 +5,17 @@ export const stripe = new Stripe(env.STRIPE_SECRET_KEY || '');
 
 export class StripeService {
   /**
-   * Cria uma sessão oficial de Checkout na Stripe
+   * Cria uma sessão oficial de Checkout na Stripe com suporte a USD e EUR
    */
   static async createCheckoutSession(params: {
     planName: string;
-    amountUSD: number;
+    amount: number;
+    currency: string;
     userEmail: string;
     userId: string;
     planId: string;
   }) {
-    const { planName, amountUSD, userEmail, userId, planId } = params;
+    const { planName, amount, currency, userEmail, userId, planId } = params;
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -22,11 +23,11 @@ export class StripeService {
       line_items: [
         {
           price_data: {
-            currency: 'usd',
+            currency: currency.toLowerCase(), // 'usd' ou 'eur'
             product_data: {
               name: `Plano ${planName}`,
             },
-            unit_amount: Math.round(amountUSD * 100), // Stripe aceita em centavos (ex: $10.00 -> 1000)
+            unit_amount: Math.round(amount * 100), // Stripe aceita em centavos (ex: 10.00 -> 1000)
           },
           quantity: 1,
         },

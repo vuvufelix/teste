@@ -168,21 +168,49 @@ export class MediaKitController {
     });
   }
 
-  // Visualização Pública do Mídia Kit pelo Slug
+  // Visualização Pública do Mídia Kit pelo Slug (Protegido contra exposição de dados sensíveis - Fase 11.4)
   static async getPublicMediaKit(req: Request, res: Response) {
     const { slug } = req.params;
 
     const mediaKit = await prisma.mediaKit.findUnique({
-      where: { slug },
-      include: {
-        socialNetworks: true,
+      where: { slug, isPublic: true },
+      select: {
+        id: true,
+        slug: true,
+        bio: true,
+        profilePicture: true,
+        coverImage: true,
+        niche: true,
+        location: true,
+        isPublic: true,
+        customDomain: true,
         user: {
-          select: { name: true, email: true },
+          select: {
+            name: true,
+            role: true,
+            // 🔒 Nunca exponha email privado, passwordHash ou refreshTokenHash!
+          },
+        },
+        socialNetworks: {
+          select: {
+            id: true,
+            platform: true,
+            handle: true,
+            username: true,
+            profileUrl: true,
+            followersCount: true,
+            engagementRate: true,
+            monthlyViews: true,
+            targetAudience: true,
+            pricePerPost: true,
+            source: true,     // Transparência da Fase 10
+            syncStatus: true, // Transparência da Fase 10
+          },
         },
       },
     });
 
-    if (!mediaKit || !mediaKit.isPublic) {
+    if (!mediaKit) {
       return res.status(404).json({ error: 'Mídia Kit não encontrado ou não está público.' });
     }
 
@@ -370,10 +398,11 @@ export class MediaKitController {
 
     const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
     const now = new Date().getTime();
-    const lastUpdated = socialNetwork.lastUpdated ? new Date(socialNetwork.lastUpdated).getTime() : 0;
+    // 🚀 Corrigido de lastUpdated para lastSyncedAt conforme o schema atual
+    const lastSyncedAt = socialNetwork.lastSyncedAt ? new Date(socialNetwork.lastSyncedAt).getTime() : 0;
 
-    if (now - lastUpdated < TWENTY_FOUR_HOURS_MS) {
-      const hoursRemaining = Math.ceil((TWENTY_FOUR_HOURS_MS - (now - lastUpdated)) / (1000 * 60 * 60));
+    if (now - lastSyncedAt < TWENTY_FOUR_HOURS_MS) {
+      const hoursRemaining = Math.ceil((TWENTY_FOUR_HOURS_MS - (now - lastSyncedAt)) / (1000 * 60 * 60));
       return res.status(429).json({
         error: `Você já atualizou estas métricas hoje. Aguarde ${hoursRemaining} hora(s) para sincronizar novamente.`,
         code: 'SYNC_RATE_LIMIT',
@@ -393,7 +422,9 @@ export class MediaKitController {
         followersCount: updatedStats.followersCount || socialNetwork.followersCount,
         engagementRate: updatedStats.engagementRate || socialNetwork.engagementRate,
         monthlyViews: (updatedStats.monthlyViews ?? 0) > 0 ? updatedStats.monthlyViews : socialNetwork.monthlyViews,
-        lastUpdated: new Date(),
+        lastSyncedAt: new Date(), // 🚀 Atualizado para o campo correto
+        source: 'AUTOMATED',      // 🚀 Registo da origem automática (Fase 10)
+        syncStatus: 'SUCCESS',    // 🚀 Estado de sucesso na sincronização (Fase 10)
       },
     });
 

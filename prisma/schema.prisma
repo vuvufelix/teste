@@ -39,6 +39,34 @@ enum ProposalStatus {
   REJECTED
 }
 
+enum PlanAudience {
+  INFLUENCER
+  AGENCY
+}
+
+enum ContractStatus {
+  DRAFT
+  PREPARATION
+  SENT
+  ACCEPTED
+  REJECTED
+  SIGNED
+  COMPLETED
+  CANCELED
+}
+
+enum MetricSource {
+  MANUAL
+  AUTOMATED
+}
+
+enum SyncStatus {
+  SUCCESS
+  FAILED
+  PENDING
+  STALE
+}
+
 model User {
   id                 String             @id @default(uuid())
   name               String
@@ -51,8 +79,8 @@ model User {
   refreshTokenHash   String?
 
   // Campos para Recuperação de Senha
-  resetPasswordTokenHash String?            // Token hash para redefinição
-  resetPasswordExpiresAt DateTime?          // Data de expiração do token
+  resetPasswordTokenHash String?         // Token hash para redefinição
+  resetPasswordExpiresAt DateTime?        // Data de expiração do token
 
   // Relacionamento de Plano Atual
   planId             String?
@@ -62,12 +90,15 @@ model User {
   mediaKit           MediaKit?
   proposals          Proposal[]
   paymentOrders      PaymentOrder[]
+  contracts          Contract[]         // 👈 ADICIONE ESTA LINHA AQUI!
 
-  agencyDelegations AgencyDelegation[] @relation("AgencyToCreators")
+  agencyDelegations  AgencyDelegation[] @relation("AgencyToCreators")
   creatorDelegations AgencyDelegation[] @relation("CreatorToAgencies")
 
-  // 👈 Adicionado o campo oposto para resolver o erro do Prisma
   pushSubscriptions  PushSubscription[]
+  representedProposals Proposal[] @relation("RepresentedCreator")
+  representedContracts Contract[] @relation("RepresentedContractCreator")
+  pdfSettings PdfCustomizationSettings?
 
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
@@ -76,96 +107,108 @@ model User {
 }
 
 model Plan {
-  id                   String   @id @default(uuid())
-  name                 String   // Ex: Inicial, Profissional, Agência
-  slug                 String   @unique // ex: basic, pro, agency
-  priceUSD             Float
-  priceAOA             Float
-  priceBRL             Float
-  durationInDays       Int      @default(30) // <--- Adicionado (Ex: 30, 90, 365)
-  maxSocialNetworks    Int      // -1 para ilimitado
-  maxProposalsPerMonth Int      // -1 para ilimitado
-  hasAIAssistant        Boolean    @default(false) // 👈 Novo controlo de IA
-  customDomainAllowed  Boolean  @default(false)
+  id                   String         @id @default(uuid())
+  name                 String         // Ex: Influenciador Inicial, Agência Profissional
+  slug                 String         @unique // ex: influencer-free, influencer-basic, etc.
+  audience             PlanAudience   @default(INFLUENCER)
+  priceUSD             Float          @default(0)
+  priceAOA             Float          @default(0)
+  priceEUR             Float          @default(0) // Substituiu o BRL
+  durationInDays       Int            @default(30)
+  maxSocialNetworks    Int            @default(1) // -1 para ilimitado
+  maxProposalsPerMonth Int            @default(2) // -1 para ilimitado
+  maxCreators          Int            @default(1) // Limite de influenciadores para agências
+  hasAIAssistant       Boolean        @default(false) 
+  customDomainAllowed  Boolean        @default(false)
+  customizationLevel   String         @default("BASIC") // BASIC, INTERMEDIATE, ADVANCED
+  isActive             Boolean        @default(true)
   
   users                User[]
-  paymentOrders        PaymentOrder[] // <--- Adicionado o relacionamento inverso
+  paymentOrders        PaymentOrder[]
 
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
   @@map("plans")
 }
 
 model MediaKit {
-  id             String          @id @default(uuid())
-  userId         String          @unique
-  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String         @id @default(uuid())
+  userId         String         @unique
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  slug           String          @unique // URL pública personalizável
-  bio            String?         @db.Text
+  slug           String         @unique // URL pública personalizável
+  bio            String?        @db.Text
   profilePicture String?
   coverImage     String?
-  niche          String?         // Ex: Moda, Tec, Lifestyle
+  niche          String?        // Ex: Moda, Tec, Lifestyle
   location       String?
-  isPublic       Boolean         @default(true)
+  isPublic       Boolean        @default(true)
 
   socialNetworks SocialNetwork[]
 
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   @@map("media_kits")
 }
 
 model SocialNetwork {
-  id             String   @id @default(uuid())
+  id             String        @id @default(uuid())
   mediaKitId     String
-  mediaKit       MediaKit @relation(fields: [mediaKitId], references: [id], onDelete: Cascade)
+  mediaKit       MediaKit      @relation(fields: [mediaKitId], references: [id], onDelete: Cascade)
 
-  platform       String   // INSTAGRAM, TIKTOK, YOUTUBE, TWITTER, LINKEDIN
+  platform       String        // FACEBOOK, INSTAGRAM, YOUTUBE, TIKTOK
   username       String
   profileUrl     String?
   handle         String?
-  followersCount Int      @default(0)
-  engagementRate Float    @default(0.0)
-  monthlyViews    Int?     @default(0)
-  lastUpdated     DateTime @default(now())
-  avgImpressions Int      @default(0)
-  lastSyncedAt   DateTime @default(now())
-  targetAudience  String?                      // Ex: "70% Feminino, 18-24 anos, Brasil"
-  pricePerPost    Float    @default(0.0)       // Valor base cobrado por post/reels (para propostas)
+  
+  followersCount Int           @default(0)
+  engagementRate Float         @default(0.0)
+  monthlyViews   Int?          @default(0)
+  avgImpressions Int           @default(0)
+  
+  // 🚀 Novos campos da Fase 10 (Origem e Transparência de Sincronização)
+  source         MetricSource  @default(MANUAL)
+  syncStatus     SyncStatus    @default(SUCCESS)
+  syncError      String?       @db.Text
+  lastSyncedAt   DateTime      @default(now())
+  
+  targetAudience String?       // Ex: "70% Feminino, 18-24 anos, Angola"
+  pricePerPost   Float         @default(0.0) // Valor base cobrado por post/reels
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@map("social_networks")
 }
 
 model Proposal {
   id          String         @id @default(uuid())
-  userId      String
+  userId      String         // Utilizador responsável pela criação (Influenciador ou Agência)
   user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // 🚀 NOVO CAMPO: Identifica o influenciador representado (caso seja uma agência a criar)
+  creatorId   String?        
+  creator     User?          @relation("RepresentedCreator", fields: [creatorId], references: [id], onDelete: SetNull)
 
   brandName   String
   brandEmail  String?
   title       String
   description String?        @db.Text
   totalAmount Float
-  currency    String         @default("USD") // USD, AOA, BRL
+  currency    String         @default("USD") // USD, AOA, EUR
   status      ProposalStatus @default(DRAFT)
   validUntil  DateTime
 
-  // 🚀 NOVOS CAMPOS COMERCIAIS E CONTRATUAIS
-  paymentTerms     String?        @db.Text // ex: "50% no ato do contrato e 50% na entrega"
-  deliveryDeadline String?        // ex: "10 dias úteis após envio do briefing"
-  revisionPolicy   String?        // ex: "Até 2 rodadas de revisões gratuitas"
-  cancellationTerms String?       @db.Text // Termos de cancelamento
+  paymentTerms      String?        @db.Text 
+  deliveryDeadline  String?        
+  revisionPolicy    String?        
+  cancellationTerms String?        @db.Text 
   
-  // 🚀 NOVO CAMPO: SNAPSHOT DE MÉTRICAS & PORTFÓLIO ("Porquê trabalhar connosco?")
-  // Armazena dados das redes sociais selecionadas para justificativa de valor no PDF
-  includeMetrics   Boolean        @default(true)
-  metricsSnapshot  Json?          // { followers: 150000, avgReach: 45000, engagementRate: "4.8%", topDemographics: "18-34 anos (68% F)" }
+  includeMetrics    Boolean        @default(true)
+  metricsSnapshot   Json?          // Snapshot das métricas e identidade no momento da emissão
+  agencySnapshot    Json?          // Snapshot dos dados da agência (caso aplicável)
 
   items       ProposalItem[]
 
@@ -192,40 +235,38 @@ model ProposalItem {
 }
 
 model PaymentOrder {
-  id               String        @id @default(uuid())
-  userId           String
-  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String        @id @default(uuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  planId           String
-  plan             Plan          @relation(fields: [planId], references: [id]) // <--- Adicionado aqui!
-  amount           Float
-  currency         String        // USD, AOA
-  paymentMethod    PaymentMethod
-  status           PaymentStatus @default(PENDING)
+  planId          String
+  plan            Plan          @relation(fields: [planId], references: [id]) 
+  amount          Float
+  currency        String        // USD, AOA, EUR
+  paymentMethod   PaymentMethod
+  status          PaymentStatus @default(PENDING)
 
-  // Dados para Pagamento Stripe (USD)
-  stripeSessionId  String?
+  stripeSessionId String?
   
-  // Dados para Pagamento Manual Kwanza (AOA)
-  receiptUrl       String?       // Foto do comprovativo enviado pelo usuário (Cloudinary)
-  bankReference    String?
-  rejectionReason  String?
-  approvedAt       DateTime?
+  receiptUrl      String?       
+  bankReference   String?
+  rejectionReason String?
+  approvedAt      DateTime?
 
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   @@map("payment_orders")
 }
 
 model AgencyDelegation {
-  id         String   @id @default(uuid())
-  agencyId   String
-  agency     User     @relation("AgencyToCreators", fields: [agencyId], references: [id], onDelete: Cascade)
-  creatorId  String
-  creator    User     @relation("CreatorToAgencies", fields: [creatorId], references: [id], onDelete: Cascade)
-  status     String   @default("PENDING") // PENDING, ACCEPTED, REVOKED
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  agencyId  String
+  agency    User     @relation("AgencyToCreators", fields: [agencyId], references: [id], onDelete: Cascade)
+  creatorId String
+  creator   User     @relation("CreatorToAgencies", fields: [creatorId], references: [id], onDelete: Cascade)
+  status    String   @default("PENDING") // PENDING, ACCEPTED, REVOKED
+  createdAt DateTime @default(now())
 
   @@unique([agencyId, creatorId])
 }
@@ -234,10 +275,74 @@ model PushSubscription {
   id        String   @id @default(uuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  endpoint  String   @unique @db.VarChar(500) // 👈 Alterado de @db.Text para @db.VarChar(500)
+  endpoint  String   @unique @db.VarChar(500) 
   p256dh    String   @db.Text
   auth      String   @db.Text
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+model Contract {
+  id                String          @id @default(uuid())
+  userId            String          // Criador ou Gestor responsável
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  creatorId         String?         // Influenciador representado (caso seja agência)
+  creator           User?           @relation("RepresentedContractCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+
+  contractType      String          // Ex: CONTENT_CREATION, SPONSORED_POST, MULTIPLATFORM, AGENCY_REPRESENTATION
+  title             String
+  brandName         String
+  brandEmail        String?
+  
+  totalAmount       Float
+  currency          String          @default("USD") // USD, AOA, EUR
+  status            ContractStatus  @default(DRAFT)
+
+  // Condições contratuais específicas
+  servicesDescription String?       @db.Text
+  paymentTerms        String?       @db.Text
+  deliveryDeadline    String?       
+  revisionCount       Int           @default(2)
+  cancellationTerms   String?       @db.Text
+  
+  // Direitos e Exclusividade
+  contentUsageRights  String?       @db.Text // Ex: 1 ano para redes sociais e digital
+  usageDuration       String?       // Ex: 12 meses
+  isExclusive         Boolean       @default(false)
+  exclusivityTerms    String?       @db.Text
+
+  validUntil          DateTime?
+  signedAt            DateTime?
+  
+  agencySnapshot      Json?         // Snapshot dos dados da agência se aplicável
+  metadataSnapshot    Json?         // Dados adicionais imutáveis
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@map("contracts")
+}
+
+model PdfCustomizationSettings {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Identidade Visual
+  logoUrl         String?
+  primaryColor    String   @default("#6366F1") // Cor padrão Indigo
+  secondaryColor  String   @default("#8B5CF6") // Cor secundária Purple
+  
+  // Layout e Rodapé/Cabeçalho
+  templateStyle   String   @default("STANDARD") // STANDARD, MODERN, EXECUTIVE, MINIMAL
+  customHeader    String?  @db.Text
+  customFooter    String?  @db.Text
+  hideWatermark   Boolean  @default(false) // Remoção da marca Influkit (se permitido pelo plano)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("pdf_customization_settings")
 }
